@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>和味到會 · 網上落單</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <div class="shop">
+      <h1>和味到會</h1>
+      <span class="en">Wo Mei Catering</span>
+    </div>
+    <p class="terms">
+      <span>最低消費 <b>$800</b></span>
+      <span>請於 <b>48 小時</b> 前落單</span>
+      <span>滿 <b>$1,500</b> 免運費</span>
+      <span>送貨時間 11:00–20:30</span>
+    </p>
+    <div class="masthead-right">
+      <div class="call">2345 6789</div>
+      <div style="font-size:.78rem;color:var(--ink-35)">每日 10:00–21:00</div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= 落單頁 ================= -->
+<main id="orderView">
+  <div class="layout">
+
+    <!-- 篩選 -->
+    <aside class="filters">
+      <button class="filter-toggle" id="fToggle" aria-expanded="false" aria-controls="fpanel">篩選菜式</button>
+      <div class="fpanel" id="fpanel">
+        <div class="type-tabs" role="tablist" aria-label="到會類型" id="typeTabs"></div>
+        <div class="fgroup">
+          <h2>搵食物</h2>
+          <input type="search" class="search" id="q" placeholder="例如：叉燒、沙律" aria-label="搵食物">
+        </div>
+        <div class="fgroup">
+          <h2>按人數篩選</h2>
+          <div class="cgroup" id="headOpts"></div>
+        </div>
+        <div class="fgroup">
+          <h2>按場景篩選</h2>
+          <div class="cgroup" id="occOpts"></div>
+        </div>
+        <div class="fgroup">
+          <h2>單點美食</h2>
+          <div class="cgroup" id="catOpts"></div>
+        </div>
+        <div class="fgroup">
+          <h2>飲食需要</h2>
+          <div class="cgroup" id="dietOpts"></div>
+        </div>
+        <div class="fgroup">
+          <h2>價錢上限</h2>
+          <input type="range" class="range" id="priceMax" min="60" max="3000" step="20" value="3000">
+          <div class="range-val" id="priceLbl">唔限價錢</div>
+        </div>
+        <div class="fgroup">
+          <label class="opt"><input type="checkbox" id="onlyPicked"><span>只睇已揀</span><span class="n" id="pickedN">0</span></label>
+        </div>
+        <button class="reset" id="reset">清除篩選</button>
+        <a class="custom-cta" id="customCta" href="#" target="_blank" rel="noopener">度身定製您的專屬到會</a>
+      </div>
+    </aside>
+
+    <!-- 餐單 -->
+    <section>
+      <div id="menu"></div>
+
+      <!-- 送貨資料 -->
+      <div class="delivery">
+        <h2>送貨資料</h2>
+        <p class="sub">我哋會用 WhatsApp 同你確認落單同付款方法。</p>
+        <div class="grid2">
+          <div class="field" data-f="name">
+            <label for="fName">聯絡人姓名</label>
+            <input id="fName" type="text" autocomplete="name" placeholder="陳大文">
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="phone">
+            <label for="fPhone">電話 <span class="hint">8 位數字香港號碼</span></label>
+            <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="date">
+            <label for="fDate">送貨日期 <span class="hint">最少 2 日後</span></label>
+            <input id="fDate" type="date">
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="time">
+            <label for="fTime">送貨時間</label>
+            <select id="fTime"><option value="">請揀時間</option></select>
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="guests">
+            <label for="fGuests">出席人數</label>
+            <input id="fGuests" type="number" inputmode="numeric" min="1" max="300" placeholder="12">
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="district">
+            <label for="fDistrict">地區</label>
+            <select id="fDistrict">
+              <option value="">請揀地區</option>
+              <option>香港島</option><option>九龍</option><option>新界</option><option>離島</option>
+            </select>
+            <div class="err"></div>
+          </div>
+          <div class="field wide" data-f="addr">
+            <label for="fAddr">大廈／屋苑／街道 <span class="hint">打頭兩個字，喺下面揀返個地址</span></label>
+            <div class="addr-box">
+              <input id="fAddr" type="text" autocomplete="off" role="combobox"
+                     aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
+                     placeholder="例如：時代廣場、太古城中心">
+              <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
+            </div>
+            <div class="picked-addr" id="pickedAddr" hidden></div>
+            <div class="map" id="map" hidden></div>
+            <div class="err"></div>
+          </div>
+          <div class="field wide" data-f="unit">
+            <label for="fUnit">樓層／單位 <span class="hint">地圖畀唔到呢個，一定要填。冇樓層就寫「地下」</span></label>
+            <input id="fUnit" type="text" placeholder="12樓 1203室 / 地下">
+            <div class="err"></div>
+          </div>
+          <div class="field wide" data-f="remark">
+            <label for="fRemark">備註 <span class="hint">選填，例如食物敏感、需要餐具</span></label>
+            <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對花生敏感"></textarea>
+            <div class="err"></div>
+          </div>
+        </div>
+
+        <div class="warn" id="servesWarn" hidden></div>
+
+        <div class="summary-err" id="errBox" hidden aria-live="polite">
+          <h3>仲有幾樣要處理</h3>
+          <ul id="errList"></ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ================= 確認頁 ================= -->
+<main id="doneView" hidden>
+  <div class="slip-wrap">
+    <div class="slip">
+      <div class="stamp">已收到</div>
+      <h2>多謝落單</h2>
+      <p class="ono">單號 <b id="oNo"></b></p>
+
+      <div class="slip-sec">
+        <h3>食物</h3>
+        <div id="oItems"></div>
+      </div>
+
+      <div class="slip-sec">
+        <div class="stot"><span>小計</span><span id="oSub"></span></div>
+        <div class="stot"><span id="oFeeLbl">運費</span><span id="oFee"></span></div>
+        <div class="stot grand"><span>總計</span><span id="oTotal"></span></div>
+      </div>
+
+      <div class="slip-sec">
+        <h3>送貨</h3>
+        <div id="oInfo"></div>
+      </div>
+
+      <a class="wa" id="waBtn" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.5-.6c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.2-.6-.3zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg>
+        用 WhatsApp 傳送訂單
+      </a>
+      <div class="slip-actions">
+        <button id="copyBtn" type="button">複製訂單內容</button>
+        <button id="backBtn" type="button">返回修改</button>
+      </div>
+
+      <p class="next">
+        <b>跟住點？</b> 撳上面個掣，訂單內容會自動填好喺 WhatsApp。<br>
+        我哋收到之後 <b>2 小時內</b> 覆你確認貨期，並發送付款連結。<br>
+        未經 WhatsApp 確認嘅訂單不會安排送貨。
+      </p>
+    </div>
+  </div>
+</main>
+
+<!-- ================= 底部落單條 ================= -->
+<div class="orderbar" id="orderbar">
+  <div class="orderbar-in">
+    <div class="tally">
+      <span class="cnt" id="barCnt">未揀食物</span>
+      <span class="amt" id="barAmt">$0</span>
+    </div>
+    <div class="breakdown" id="barBreak"></div>
+    <button class="submit" id="submitBtn" type="button">落單</button>
+  </div>
+</div>
+
+<script src="data/menu.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
