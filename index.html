@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>和味到會 · 網上落單</title>
+<title>夜嚐野 Night After Night · 辦公室到會網上落單</title>
+<meta name="theme-color" content="#0A0908">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -14,18 +15,21 @@
 <header class="masthead">
   <div class="masthead-in">
     <div class="shop">
-      <h1>和味到會</h1>
-      <span class="en">Wo Mei Catering</span>
+      <span class="logo-bar" aria-hidden="true"></span>
+      <div>
+        <h1>夜嚐野</h1>
+        <span class="en">Night After Night · 辦公室到會</span>
+      </div>
     </div>
     <p class="terms">
-      <span>最低消費 <b>$800</b></span>
-      <span>請於 <b>48 小時</b> 前落單</span>
-      <span>滿 <b>$1,500</b> 免運費</span>
-      <span>送貨時間 11:00–20:30</span>
+      <span class="promo">全單9折</span>
+      <span>全單滿 <b>$1,500</b> 免費送貨</span>
+      <span>請於 <b>3 個工作天</b> 前落單</span>
+      <span>地面交收，送上寫字樓 <b>+$100</b></span>
     </p>
     <div class="masthead-right">
-      <div class="call">2345 6789</div>
-      <div style="font-size:.78rem;color:var(--ink-35)">每日 10:00–21:00</div>
+      <a class="call" id="waHead" href="#" target="_blank" rel="noopener">WhatsApp 6073 3422</a>
+      <div class="occ-line">會議茶點・午餐到會・公司活動・培訓聚會</div>
     </div>
   </div>
 </header>
@@ -38,48 +42,44 @@
     <aside class="filters">
       <button class="filter-toggle" id="fToggle" aria-expanded="false" aria-controls="fpanel">篩選菜式</button>
       <div class="fpanel" id="fpanel">
-        <div class="type-tabs" role="tablist" aria-label="到會類型" id="typeTabs"></div>
         <div class="fgroup">
           <h2>搵食物</h2>
-          <input type="search" class="search" id="q" placeholder="例如：叉燒、沙律" aria-label="搵食物">
+          <input type="search" class="search" id="q" placeholder="例如：雞翼、椰汁" aria-label="搵食物">
         </div>
         <div class="fgroup">
-          <h2>按人數篩選</h2>
-          <div class="cgroup" id="headOpts"></div>
-        </div>
-        <div class="fgroup">
-          <h2>按場景篩選</h2>
-          <div class="cgroup" id="occOpts"></div>
-        </div>
-        <div class="fgroup">
-          <h2>單點美食</h2>
+          <h2>分類</h2>
           <div class="cgroup" id="catOpts"></div>
+        </div>
+        <div class="fgroup">
+          <label class="opt"><input type="checkbox" id="onlyStar"><span>只睇皇牌</span></label>
         </div>
         <div class="fgroup">
           <h2>飲食需要</h2>
           <div class="cgroup" id="dietOpts"></div>
         </div>
         <div class="fgroup">
-          <h2>價錢上限</h2>
-          <input type="range" class="range" id="priceMax" min="60" max="3000" step="20" value="3000">
+          <h2>每份價錢上限</h2>
+          <input type="range" class="range" id="priceMax" min="20" max="400" step="10" value="400">
           <div class="range-val" id="priceLbl">唔限價錢</div>
         </div>
         <div class="fgroup">
           <label class="opt"><input type="checkbox" id="onlyPicked"><span>只睇已揀</span><span class="n" id="pickedN">0</span></label>
         </div>
         <button class="reset" id="reset">清除篩選</button>
-        <a class="custom-cta" id="customCta" href="#" target="_blank" rel="noopener">度身定製您的專屬到會</a>
+        <a class="custom-cta" id="customCta" href="#" target="_blank" rel="noopener">度身定製您的到會餐單</a>
+        <p class="side-note">價錢為每「份」總價，已列明份量。</p>
       </div>
     </aside>
 
     <!-- 餐單 -->
     <section>
+      <div class="rush-note" id="rushNote" hidden></div>
       <div id="menu"></div>
 
       <!-- 送貨資料 -->
       <div class="delivery">
         <h2>送貨資料</h2>
-        <p class="sub">我哋會用 WhatsApp 同你確認落單同付款方法。</p>
+        <p class="sub">我哋會用 WhatsApp 同你確認訂單同付款方法。</p>
         <div class="grid2">
           <div class="field" data-f="name">
             <label for="fName">聯絡人姓名</label>
@@ -91,19 +91,24 @@
             <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
             <div class="err"></div>
           </div>
+          <div class="field" data-f="company">
+            <label for="fCompany">公司名稱 <span class="hint">選填</span></label>
+            <input id="fCompany" type="text" autocomplete="organization" placeholder="ABC Limited">
+            <div class="err"></div>
+          </div>
+          <div class="field" data-f="occasion">
+            <label for="fOccasion">場合</label>
+            <select id="fOccasion"><option value="">請揀場合</option></select>
+            <div class="err"></div>
+          </div>
           <div class="field" data-f="date">
-            <label for="fDate">送貨日期 <span class="hint">最少 2 日後</span></label>
+            <label for="fDate">送貨日期 <span class="hint" id="dateHint"></span></label>
             <input id="fDate" type="date">
             <div class="err"></div>
           </div>
           <div class="field" data-f="time">
             <label for="fTime">送貨時間</label>
             <select id="fTime"><option value="">請揀時間</option></select>
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="guests">
-            <label for="fGuests">出席人數</label>
-            <input id="fGuests" type="number" inputmode="numeric" min="1" max="300" placeholder="12">
             <div class="err"></div>
           </div>
           <div class="field" data-f="district">
@@ -119,7 +124,7 @@
             <div class="addr-box">
               <input id="fAddr" type="text" autocomplete="off" role="combobox"
                      aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
-                     placeholder="例如：時代廣場、太古城中心">
+                     placeholder="例如：時代廣場、太古坊">
               <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
             </div>
             <div class="picked-addr" id="pickedAddr" hidden></div>
@@ -127,18 +132,34 @@
             <div class="err"></div>
           </div>
           <div class="field wide" data-f="unit">
-            <label for="fUnit">樓層／單位 <span class="hint">地圖畀唔到呢個，一定要填。冇樓層就寫「地下」</span></label>
-            <input id="fUnit" type="text" placeholder="12樓 1203室 / 地下">
+            <label for="fUnit">樓層／單位 <span class="hint">地圖畀唔到呢個，一定要填</span></label>
+            <input id="fUnit" type="text" placeholder="12樓 1203室">
+            <div class="err"></div>
+          </div>
+          <div class="field wide" data-f="walkup">
+            <label class="opt toggle"><input type="checkbox" id="fWalkup"><span>要送上寫字樓／樓上</span></label>
+            <div class="walkup-note" id="walkupNote">預設<b>地面交收</b>。送上寫字樓或樓上每張訂單另加 <b>$100</b>。</div>
             <div class="err"></div>
           </div>
           <div class="field wide" data-f="remark">
             <label for="fRemark">備註 <span class="hint">選填，例如食物敏感、需要餐具</span></label>
-            <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對花生敏感"></textarea>
+            <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對堅果敏感"></textarea>
             <div class="err"></div>
           </div>
         </div>
 
-        <div class="warn" id="servesWarn" hidden></div>
+        <div class="policy">
+          <h3>落單須知</h3>
+          <ul>
+            <li>訂單確認後 <b>2 個工作天內</b>付全數。逾期未付款，訂單會自動取消。</li>
+            <li>訂單一經確認，<b>不可更改或取消</b>，已付款項恕不退還。</li>
+            <li>送貨當日如懸掛<b>八號或以上颱風信號</b>或<b>黑色暴雨警告</b>，當日訂單會取消，可於原訂單日期起 <b>2 個月內</b>改期。</li>
+          </ul>
+          <div class="field" data-f="terms">
+            <label class="opt terms-ok"><input type="checkbox" id="fTerms"><span>我已閱讀並同意以上條款</span></label>
+            <div class="err"></div>
+          </div>
+        </div>
 
         <div class="summary-err" id="errBox" hidden aria-live="polite">
           <h3>仲有幾樣要處理</h3>
@@ -163,14 +184,20 @@
       </div>
 
       <div class="slip-sec">
-        <div class="stot"><span>小計</span><span id="oSub"></span></div>
+        <div class="stot"><span>小計（已計 9 折）</span><span id="oSub"></span></div>
         <div class="stot"><span id="oFeeLbl">運費</span><span id="oFee"></span></div>
+        <div class="stot" id="oWalkRow"><span>送上寫字樓</span><span id="oWalk"></span></div>
         <div class="stot grand"><span>總計</span><span id="oTotal"></span></div>
       </div>
 
       <div class="slip-sec">
         <h3>送貨</h3>
         <div id="oInfo"></div>
+      </div>
+
+      <div class="slip-sec pay">
+        <h3>付款</h3>
+        <p>請於 <b id="oPayBy"></b> 前付全數。我哋會喺 WhatsApp 覆你確認同付款方法。</p>
       </div>
 
       <a class="wa" id="waBtn" href="#" target="_blank" rel="noopener">
@@ -183,13 +210,39 @@
       </div>
 
       <p class="next">
-        <b>跟住點？</b> 撳上面個掣，訂單內容會自動填好喺 WhatsApp。<br>
-        我哋收到之後 <b>2 小時內</b> 覆你確認貨期，並發送付款連結。<br>
-        未經 WhatsApp 確認嘅訂單不會安排送貨。
+        <b>跟住點？</b> 撳上面個掣，訂單內容會自動填好喺 WhatsApp（<b>6073 3422</b>）。<br>
+        未經 WhatsApp 確認嘅訂單不會安排送貨。訂單一經確認，不可更改或取消。<br>
+        送貨當日如懸掛八號或以上颱風信號或黑色暴雨警告，當日訂單取消，可於 2 個月內改期。<br>
+        用餐愉快！
       </p>
     </div>
   </div>
 </main>
+
+<!-- ================= 菜式詳情 ================= -->
+<dialog class="sheet" id="sheet">
+  <form method="dialog" class="sheet-in">
+    <button class="sheet-x" type="submit" aria-label="關閉">×</button>
+    <img id="shImg" alt="">
+    <div class="sheet-body">
+      <div class="sheet-cat" id="shCat"></div>
+      <h2 id="shName"></h2>
+      <div class="sheet-price" id="shPrice"></div>
+      <div class="sheet-portion" id="shPortion"></div>
+      <div class="meta" id="shTags"></div>
+      <div class="sheet-qty">
+        <span id="shQtyLbl">數量（份）</span>
+        <div class="qty">
+          <button type="button" id="shMinus" aria-label="減少">−</button>
+          <input type="number" id="shQty" value="1" min="0" inputmode="numeric" aria-label="數量">
+          <button type="button" id="shPlus" aria-label="增加">+</button>
+        </div>
+      </div>
+      <button class="sheet-add" type="submit" id="shAdd">加入訂單</button>
+      <p class="sheet-remind">價錢為每「份」總價，已列明份量。</p>
+    </div>
+  </form>
+</dialog>
 
 <!-- ================= 底部落單條 ================= -->
 <div class="orderbar" id="orderbar">

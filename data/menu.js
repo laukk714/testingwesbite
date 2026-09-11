@@ -2,202 +2,100 @@
    1. 設定 — 落單前改呢度
    ============================================================ */
 const CONFIG = {
-  shopName: "和味到會",
-  whatsappNumber: "85223456789", // 國碼 + 號碼，唔要 + 同空格
-  minOrder: 800,                 // 最低消費
-  freeDeliveryAt: 1500,          // 幾多錢免運
-  deliveryFee: 80,
-  leadDays: 2,                   // 最少幾多日前落單
+  shopName: "夜嚐野",
+  shopNameEn: "Night After Night",
+  whatsappNumber: "85260733422",  // 國碼 + 號碼，唔要 + 同空格
+  whatsappDisplay: "6073 3422",
+
+  discountLabel: "全單9折",       // 顯示用；價錢已經喺下面每款寫死
+  freeDeliveryAt: 1500,           // 全單滿呢個數免運費
+  deliveryFee: 100,               // ⚠ 未定：$1,500 以下嘅標準運費，Menu 冇印，同廚房確認
+  walkupSurcharge: 100,           // 地面交收；送上寫字樓 +$100
+  minOrder: 0,                    // 最低消費（未定，0 = 冇）
+
+  leadWorkingDays: 3,             // 最少 3 個工作天前落單
+  paymentWorkingDays: 2,          // 確認後 2 個工作天內付款
+  allowRushOrders: false,         // true = 3 個工作天內都落到單，但只見到 rush:true 嘅款
+  holidays: [],                   // 公眾假期 "YYYY-MM-DD"，唔計工作天。例："2026-12-25"
+
+  deliveryFrom: "08:00",          // ⚠ 未定：送貨時段
+  deliveryTo: "18:00",
+  deliveryStepMin: 30,
+
   maxQty: 99
 };
 
 /* ============================================================
-   2. 餐單資料 — 加 img 屬性就可以換真相
-      例：img:"images/char-siu.jpg"
+   2. 分類 — 餐單上嘅排列次序
    ============================================================ */
-const TYPES = [
-  {key:"BBQ", label:"BBQ", icon:
-   '<path d="M12 3s4 3.6 4 7.6a4 4 0 0 1-8 0c0-1.8 1-2.8 1-2.8s.8.9.8 1.9.5 1.4 1 1.4S12.5 8 12 3z"/><path d="M6 17h12M8 21l1.5-4M16 21l-1.5-4"/>'},
-  {key:"經典到會", label:"經典到會", icon:
-   '<path d="M7 13.5h10V19a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M8.5 13.5a3.5 3.5 0 1 1 1-6.8 3.2 3.2 0 0 1 5 0 3.5 3.5 0 1 1 1 6.8"/>'},
-  {key:"小朋友生日", label:"小朋友生日", icon:
-   '<path d="M4.5 20h15v-5.5h-15z"/><path d="M6.5 14.5v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v2"/><path d="M12 10.5V8M12 5.5v.6"/>'}
+const CATEGORIES = [
+  {key:"dessert", label:"糖水", note:"每杯 350ml"},
+  {key:"snack",   label:"小食", note:"價錢為每「份」總價・已列明份量", foot:"建議60分鐘內食用"},
+  {key:"drink",   label:"飲品", note:"每杯 350ml"}
 ];
 
-// 人數 chip：以每款嘅建議人數計
-const HEADCOUNTS = [
-  {label:"4-8人",   min:4,  max:8},
-  {label:"8-10人",  min:8,  max:10},
-  {label:"11-16人", min:11, max:16},
-  {label:"19-21人", min:19, max:21},
-  {label:"24-26人", min:24, max:26},
-  {label:"30人以上", min:30, max:999}
-];
+/* 標籤只係資訊，唔影響價錢；會跟住訂單去 WhatsApp */
+const TAG_STYLE = {
+  "皇牌":"star", "微辣":"hot", "素食/可走葷":"veg", "含堅果":"warn",
+  "凍食佳":"", "免餐具":"", "低糖":"", "建議60分鐘內食用":""
+};
 
-const OCCASIONS = ["中秋套餐","夏日限定","家庭聚會","公司/商務聚會","輕食茶敘","早餐會","船河派對","小朋友生日會"];
-
-// 餐單上嘅排列次序；含「套餐」二字嘅唔會出現喺「單點美食」chip 入面
-const CATEGORIES = ["套餐","BBQ 套餐","小朋友派對套餐","人氣小食拼盤","主廚推薦熱盤",
-                    "燒味","海鮮","燒烤串燒","麵飯","沙律","蔬菜拼盤","甜品","飲品"];
-
-const MENU = [
-  /* ---------- 經典到會 · 套餐 ---------- */
-  {id:"S1", cat:"套餐", name:"十人派對套餐", price:980, serves:10, hue:20, types:["經典到會"],
-   occ:["家庭聚會","公司/商務聚會"], tags:["招牌"],
-   desc:"叉燒、西檸雞、揚州炒飯、沙律、蛋撻，另送汽水一打"},
-  {id:"S2", cat:"套餐", name:"二十人豐盛套餐", price:1880, serves:20, hue:18, types:["經典到會"],
-   occ:["公司/商務聚會","家庭聚會"], tags:["招牌"],
-   desc:"燒味三拼、兩道熱葷、炒麵、沙律、兩款甜品"},
-  {id:"S3", cat:"套餐", name:"十人素食套餐", price:880, serves:10, hue:120, types:["經典到會"],
-   occ:["家庭聚會","輕食茶敘"], tags:["素食"],
-   desc:"椰菜花沙律、麻婆豆腐、素春卷、羅漢齋炒麵、芒果布甸"},
-  {id:"S4", cat:"套餐", name:"六人輕食茶敘套餐", price:680, serves:6, hue:52, types:["經典到會"],
-   occ:["輕食茶敘","早餐會"], tags:[],
-   desc:"三文治拼盤、司康、迷你鹹批、生果串、咖啡壺一壺"},
-  {id:"S5", cat:"套餐", name:"十二人早餐會套餐", price:1180, serves:12, hue:48, types:["經典到會"],
-   occ:["早餐會","公司/商務聚會"], tags:[],
-   desc:"牛角包、腸仔炒蛋、燒風琴薯、乳酪杯、鮮橙汁"},
-  {id:"S6", cat:"套餐", name:"廿五人中秋團圓套餐", price:2280, serves:25, hue:30, types:["經典到會"],
-   occ:["中秋套餐","家庭聚會"], tags:["招牌"],
-   desc:"燒味四拼、蒜蓉粉絲扇貝、海鮮炒麵、雙色月餅、楊枝甘露"},
-  {id:"S7", cat:"套餐", name:"三十人企業自助餐", price:2880, serves:30, hue:14, types:["經典到會"],
-   occ:["公司/商務聚會"], tags:[],
-   desc:"八道熱葷、兩款沙律、兩款主食、甜品台，跟餐具同保溫爐"},
-  {id:"S8", cat:"套餐", name:"二十人船河派對套餐", price:1980, serves:20, hue:195, types:["經典到會"],
-   occ:["船河派對","夏日限定"], tags:["含海鮮"],
-   desc:"炸物拼盤、凍蝦、燒雞髀、意粉沙律、生果盤，全部用防漏盒裝"},
-
-  /* ---------- BBQ ---------- */
-  {id:"G1", cat:"BBQ 套餐", name:"八人炭燒BBQ套餐", price:880, serves:8, hue:26, types:["BBQ"],
-   occ:["家庭聚會","夏日限定"], tags:["熱食"],
-   desc:"雞翼、豬扒、腸仔、粟米、燒烤醬，跟叉同錫紙"},
-  {id:"G2", cat:"BBQ 套餐", name:"十六人BBQ豪華套餐", price:1680, serves:16, hue:22, types:["BBQ"],
-   occ:["夏日限定","船河派對"], tags:["招牌","熱食"],
-   desc:"加牛小排、雞中翼、蜜糖麵包、燒生蠔（6隻）"},
-  {id:"G3", cat:"BBQ 套餐", name:"二十人海鮮BBQ套餐", price:2180, serves:20, hue:198, types:["BBQ"],
-   occ:["船河派對","夏日限定"], tags:["含海鮮","熱食"],
-   desc:"大蝦、扇貝、魷魚筒、三文魚扒，配蒜蓉牛油"},
-  {id:"G4", cat:"燒烤串燒", name:"蜜糖雞翼串（20串）", price:168, serves:8, hue:36,
-   types:["BBQ","小朋友生日"], occ:["家庭聚會"], tags:["熱食"],
-   desc:"已醃足八小時，開爐就燒得"},
-  {id:"G5", cat:"燒烤串燒", name:"紐西蘭羊架串（10串）", price:268, serves:6, hue:10,
-   types:["BBQ"], occ:[], tags:["熱食"],
-   desc:"迷迭香黑椒醃製"},
-  {id:"G6", cat:"燒烤串燒", name:"燒烤海鮮拼盤", price:328, serves:8, hue:200,
-   types:["BBQ"], occ:["船河派對"], tags:["含海鮮","熱食"],
-   desc:"虎蝦、翠玉螺、魷魚，跟蒜蓉牛油同檸檬"},
-  {id:"G7", cat:"燒烤串燒", name:"燒烤爐連炭及工具", price:180, serves:20, hue:0,
-   types:["BBQ"], occ:[], tags:[],
-   desc:"租借一日，包炭 5kg、火種、燒叉 20 支、手套"},
-
-  /* ---------- 小朋友生日 ---------- */
-  {id:"K1", cat:"小朋友派對套餐", name:"十人小朋友生日套餐", price:780, serves:10, hue:330,
-   types:["小朋友生日"], occ:["小朋友生日會"], tags:["招牌"],
-   desc:"迷你漢堡、薯條、雞塊、生果串、果汁，跟派對紙杯碟"},
-  {id:"K2", cat:"小朋友派對套餐", name:"二十人生日派對套餐", price:1480, serves:20, hue:325,
-   types:["小朋友生日"], occ:["小朋友生日會"], tags:[],
-   desc:"加薄餅、意粉、棉花糖串、氣球佈置一套"},
-  {id:"K3", cat:"甜品", name:"生日蛋糕（8吋）", price:288, serves:10, hue:340,
-   types:["小朋友生日"], occ:["小朋友生日會"], tags:["凍食"],
-   desc:"雲呢拿或朱古力味，可代寫名，跟蠟燭同刀叉"},
-
-  /* ---------- 燒味 ---------- */
-  {id:"R1", cat:"燒味", name:"蜜汁叉燒", price:188, serves:6, hue:8, types:["經典到會"],
-   occ:["家庭聚會"], tags:["招牌","熱食"], desc:"半肥瘦梅頭，即叫即斬，跟蜜汁一盒"},
-  {id:"R2", cat:"燒味", name:"脆皮燒腩仔", price:208, serves:6, hue:12, types:["經典到會"],
-   occ:["家庭聚會"], tags:["熱食"], desc:"皮脆肉嫩，跟黃芥辣"},
-  {id:"R3", cat:"燒味", name:"玫瑰豉油雞（半隻）", price:158, serves:5, hue:35, types:["經典到會"],
-   occ:[], tags:["熱食"], desc:"滷水浸足三小時，起骨切件"},
-  {id:"R4", cat:"燒味", name:"燒味三拼", price:288, serves:10, hue:6, types:["經典到會"],
-   occ:["家庭聚會","公司/商務聚會"], tags:["招牌","熱食"], desc:"叉燒、燒腩、豉油雞，一盤上齊"},
-
-  /* ---------- 人氣小食拼盤 ---------- */
-  {id:"A2", cat:"人氣小食拼盤", name:"沙律蝦多士", price:138, serves:6, hue:30, types:["經典到會"],
-   occ:["公司/商務聚會"], tags:["熱食","含海鮮"], desc:"厚切多士夾蝦膠，炸至金黃"},
-  {id:"A3", cat:"人氣小食拼盤", name:"素春卷（20 條）", price:88, serves:8, hue:100,
-   types:["經典到會","小朋友生日"], occ:["家庭聚會"], tags:["素食","熱食"],
-   desc:"椰菜、木耳、粉絲餡，跟甜酸醬"},
-  {id:"A4", cat:"人氣小食拼盤", name:"芝士薯角", price:98, serves:6, hue:45,
-   types:["經典到會","小朋友生日"], occ:["小朋友生日會"], tags:["素食","熱食"],
-   desc:"焗芝士配酸忌廉"},
-  {id:"A6", cat:"人氣小食拼盤", name:"迷你牛肉漢堡（12 件）", price:168, serves:6, hue:18,
-   types:["經典到會","小朋友生日"], occ:["小朋友生日會","公司/商務聚會"], tags:["熱食"],
-   desc:"手打牛肉餅配車打芝士"},
-  {id:"C2", cat:"人氣小食拼盤", name:"意式凍肉芝士拼盤", price:228, serves:8, hue:340,
-   types:["經典到會"], occ:["公司/商務聚會","輕食茶敘"], tags:["凍食"],
-   desc:"巴馬火腿、莎樂美腸、車打芝士、青欖"},
-
-  /* ---------- 主廚推薦熱盤 ---------- */
-  {id:"A1", cat:"主廚推薦熱盤", name:"椒鹽雞軟骨", price:128, serves:6, hue:40, types:["經典到會"],
-   occ:[], tags:["熱食","辣"], desc:"炸得香脆，撈勻椒鹽同蒜片"},
-  {id:"M1", cat:"主廚推薦熱盤", name:"咕嚕肉", price:158, serves:6, hue:14, types:["經典到會"],
-   occ:["家庭聚會"], tags:["熱食"], desc:"菠蘿、青紅椒，酸甜適中"},
-  {id:"M2", cat:"主廚推薦熱盤", name:"黑椒牛柳粒", price:198, serves:6, hue:22, types:["經典到會"],
-   occ:["公司/商務聚會"], tags:["熱食","招牌"], desc:"澳洲牛柳，鐵板黑椒汁"},
-  {id:"M3", cat:"主廚推薦熱盤", name:"西檸煎軟雞", price:148, serves:6, hue:50, types:["經典到會"],
-   occ:["家庭聚會"], tags:["熱食"], desc:"雞扒切件，淋鮮檸檬汁"},
-  {id:"M4", cat:"主廚推薦熱盤", name:"麻婆豆腐", price:118, serves:6, hue:5, types:["經典到會"],
-   occ:[], tags:["素食","辣","熱食"], desc:"四川花椒，唔加肉碎，全素"},
-  {id:"M5", cat:"主廚推薦熱盤", name:"避風塘炸雞翼（20 隻）", price:178, serves:8, hue:36,
-   types:["經典到會"], occ:["家庭聚會"], tags:["熱食","辣","招牌"], desc:"蒜蓉豆豉，惹味送酒"},
-
-  /* ---------- 海鮮 ---------- */
-  {id:"F1", cat:"海鮮", name:"椒鹽鮮魷", price:168, serves:6, hue:190, types:["經典到會"],
-   occ:["船河派對"], tags:["熱食","含海鮮","辣"], desc:"新鮮魷魚，炸至外脆內軟"},
-  {id:"F2", cat:"海鮮", name:"蒜蓉粉絲蒸扇貝（12 隻）", price:228, serves:6, hue:200,
-   types:["經典到會"], occ:["中秋套餐"], tags:["熱食","含海鮮"], desc:"即開扇貝，蒜蓉粉絲鋪底"},
-  {id:"F3", cat:"海鮮", name:"泰式咖喱蟹", price:288, serves:6, hue:25, types:["經典到會"],
-   occ:["船河派對"], tags:["熱食","含海鮮","辣"], desc:"斯里蘭卡蟹，黃咖喱汁跟饅頭"},
-
-  /* ---------- 麵飯 ---------- */
-  {id:"N1", cat:"麵飯", name:"揚州炒飯", price:128, serves:8, hue:48,
-   types:["經典到會","小朋友生日"], occ:["家庭聚會","公司/商務聚會"], tags:["熱食","含海鮮"],
-   desc:"蝦仁、叉燒、青豆，粒粒分明"},
-  {id:"N2", cat:"麵飯", name:"星洲炒米", price:128, serves:8, hue:42, types:["經典到會"],
-   occ:["家庭聚會"], tags:["熱食","辣","含海鮮"], desc:"咖喱味炒米粉"},
-  {id:"N3", cat:"麵飯", name:"海鮮炒烏冬", price:148, serves:8, hue:38, types:["經典到會"],
-   occ:["公司/商務聚會"], tags:["熱食","含海鮮"], desc:"蝦、魷魚、帶子，日式醬油炒"},
-  {id:"N4", cat:"麵飯", name:"羅漢齋炒麵", price:118, serves:8, hue:110, types:["經典到會"],
-   occ:["輕食茶敘"], tags:["素食","熱食"], desc:"雜菌、豆腐乾、時蔬"},
-
-  /* ---------- 沙律 ---------- */
-  {id:"C1", cat:"沙律", name:"凱撒沙律", price:118, serves:6, hue:105, types:["經典到會"],
-   occ:["輕食茶敘","早餐會"], tags:["凍食"], desc:"羅馬生菜、煙肉碎、麵包粒（醬另上）"},
-  {id:"A5", cat:"沙律", name:"泰式青木瓜沙律", price:108, serves:6, hue:90, types:["經典到會"],
-   occ:["夏日限定"], tags:["素食","辣","含花生","凍食"], desc:"手撕青木瓜、車厘茄、花生碎，酸辣開胃"},
-
-  /* ---------- 蔬菜拼盤 ---------- */
-  {id:"V1", cat:"蔬菜拼盤", name:"田園手指蔬菜條", price:98, serves:8, hue:115,
-   types:["經典到會","小朋友生日"], occ:["輕食茶敘","早餐會"], tags:["素食","凍食"],
-   desc:"紅蘿蔔、青瓜、芹菜、車厘茄，跟牧場沙律醬"},
-  {id:"C3", cat:"蔬菜拼盤", name:"雜錦生果盤", price:138, serves:10, hue:80,
-   types:["經典到會","小朋友生日"], occ:["夏日限定","輕食茶敘"], tags:["素食","凍食"],
-   desc:"時令生果切件"},
-
-  /* ---------- 甜品 ---------- */
-  {id:"D1", cat:"甜品", name:"楊枝甘露", price:108, serves:8, hue:35, types:["經典到會"],
-   occ:["夏日限定"], tags:["凍食","招牌"], desc:"呂宋芒、西柚粒、椰汁"},
-  {id:"D2", cat:"甜品", name:"芒果布甸（12 杯）", price:98, serves:12, hue:44,
-   types:["經典到會","小朋友生日"], occ:["小朋友生日會"], tags:["凍食"], desc:"淨杯裝，方便派"},
-  {id:"D3", cat:"甜品", name:"蛋撻（12 件）", price:96, serves:12, hue:46,
-   types:["經典到會","小朋友生日"], occ:["早餐會","輕食茶敘"], tags:["熱食"],
-   desc:"酥皮蛋撻，送到時仲暖"},
-  {id:"D4", cat:"甜品", name:"迷你奶黃月餅（12 件）", price:158, serves:12, hue:32,
-   types:["經典到會"], occ:["中秋套餐"], tags:["凍食"], desc:"一口一件，每盒兩款味"},
-
-  /* ---------- 飲品 ---------- */
-  {id:"B1", cat:"飲品", name:"樽裝檸檬茶（12 支）", price:96, serves:12, hue:55,
-   types:["經典到會","小朋友生日"], occ:[], tags:["凍食","素食"], desc:"500ml 樽裝"},
-  {id:"B2", cat:"飲品", name:"罐裝汽水（12 罐）", price:72, serves:12, hue:210,
-   types:["經典到會","BBQ","小朋友生日"], occ:[], tags:["凍食","素食"], desc:"可樂、雪碧、忌廉，可混"},
-  {id:"B3", cat:"飲品", name:"鮮榨橙汁（2 公升）", price:88, serves:10, hue:32,
-   types:["經典到會","小朋友生日"], occ:["早餐會"], tags:["凍食","素食"], desc:"當日鮮榨，跟紙杯"}
-];
-
-// 飲食需要篩選：key = 標籤，勾咗即係要隱藏含該標籤嘅食物
+// 飲食需要篩選：include = 只睇有呢個標籤嘅；exclude = 隱藏有呢個標籤嘅
 const DIETS = [
-  {key:"素食",  label:"只睇素食",  mode:"include"},
-  {key:"辣",     label:"免辣",       mode:"exclude"},
-  {key:"含海鮮", label:"免海鮮",     mode:"exclude"},
-  {key:"含花生", label:"免花生",     mode:"exclude"}
+  {key:"素食/可走葷", label:"只睇素食／可走葷", mode:"include"},
+  {key:"微辣",        label:"免辣",             mode:"exclude"},
+  {key:"含堅果",      label:"免堅果",           mode:"exclude"}
 ];
+
+/* ============================================================
+   3. 餐單資料 — 來源：NAN 辦公室到會MENU $$.xlsx
+      list = 原價，price = 9折價（落單用 price）
+      加 img 屬性就可以換真相，例：img:"images/yeung-chi.jpg"
+
+      ⚠ 上線前要同廚房確認：
+        - 三款 一口／涼拌 嘅價錢，海報同 Excel 唔同（用咗 Excel）
+        - 芥末蝦球 海報係皇牌，Excel 唔係（暫時唔係）
+        - 微辣／素食／含堅果／凍食佳 標籤只有海報有，下面只填咗由名可以肯定嘅
+   ============================================================ */
+const MENU = [
+  /* ---------- 糖水 · 350ml ---------- */
+  {id:"D01", cat:"dessert", name:"楊枝甘露",         list:43, price:38, signature:true,  hue:38,  tags:["凍食佳"], rush:false},
+  {id:"D02", cat:"dessert", name:"芒果西米小丸子",   list:38, price:34, signature:false, hue:42,  tags:["凍食佳"], rush:false},
+  {id:"D03", cat:"dessert", name:"芒果西米三色芋圓", list:38, price:34, signature:false, hue:44,  tags:["凍食佳"], rush:false},
+  {id:"D04", cat:"dessert", name:"椰汁斑斕大滿貫",   list:43, price:38, signature:false, hue:95,  tags:[],         rush:false},
+  {id:"D05", cat:"dessert", name:"椰汁桃膠馬蹄爆爆珠", list:38, price:34, signature:false, hue:60, tags:[],        rush:false},
+  {id:"D06", cat:"dessert", name:"椰汁桃膠三色芋圓", list:38, price:34, signature:false, hue:300, tags:[],         rush:false},
+  {id:"D07", cat:"dessert", name:"真打開心果糊",     list:45, price:40, signature:false, hue:80,  tags:["含堅果"], rush:false},
+  {id:"D08", cat:"dessert", name:"真打芝麻糊",       list:33, price:30, signature:false, hue:0,   tags:[],         rush:false},
+  {id:"D09", cat:"dessert", name:"冬瓜雪梨海底椰",   list:33, price:30, signature:true,  hue:110, tags:[],         rush:false},
+
+  /* ---------- 小食 · 價錢為每份總價 ---------- */
+  {id:"S01", cat:"snack", name:"瑞士雞翼",           portion:"1份（10隻）", list:88,  price:78,  signature:false, hue:20, tags:[], rush:false},
+  {id:"S02", cat:"snack", name:"爆蒜雞中翼",         portion:"1份（10隻）", list:98,  price:88,  signature:false, hue:24, tags:[], rush:false},
+  {id:"S03", cat:"snack", name:"爆蒜雞翼尖",         portion:"1份（20隻）", list:52,  price:48,  signature:false, hue:26, tags:[], rush:false},
+  {id:"S04", cat:"snack", name:"咖哩三重奏",         portion:"1份（麵筋10件 / 魚蛋20粒 / 蘿蔔10件）", list:120, price:108, signature:true, hue:40, tags:["微辣"], rush:false},
+  {id:"S05", cat:"snack", name:"麻辣鮮花椒乾撈鮑魚", portion:"1份（10件）", list:360, price:320, signature:false, hue:8,  tags:["微辣"], rush:false},
+  {id:"S06", cat:"snack", name:"一口乾坤咕嚕肉",     portion:"1人份（10粒）", list:138, price:120, signature:true, hue:14, tags:[], rush:false},
+  {id:"S07", cat:"snack", name:"芥末蝦球配炸饅頭底", portion:"1人份（5件起）", list:158, price:138, signature:false, hue:30, tags:[], rush:false},  // 皇牌？海報有、Excel 冇
+  {id:"S08", cat:"snack", name:"懷舊手工百花釀蟹鉗", portion:"1人份（5件起）", list:368, price:328, signature:true, hue:18, tags:[], rush:false},
+  {id:"S09", cat:"snack", name:"炸豆卜豬肉丸",       portion:"15粒",          list:88,  price:80,  signature:false, hue:36, tags:[], rush:false},
+  {id:"S10", cat:"snack", name:"炸腐皮韭菜餃",       portion:"15粒",          list:98,  price:88,  signature:false, hue:48, tags:[], rush:false},
+  {id:"S11", cat:"snack", name:"一口柱侯牛肋條撈陳村粉", portion:"1份（5杯）", list:98, price:88,  signature:true,  hue:16, tags:["免餐具"], rush:false},
+  {id:"S12", cat:"snack", name:"一口鹽水鴨胸撈陳村粉",   portion:"1份（5杯）", list:98, price:88,  signature:false, hue:22, tags:["免餐具"], rush:false},
+  {id:"S13", cat:"snack", name:"一口麻辣皮蛋花甲米線",   portion:"1份（10杯）", list:248, price:220, signature:false, hue:6, tags:["微辣","免餐具"], rush:false},  // ⚠ 海報 120/108
+  {id:"S14", cat:"snack", name:"一口芝士肉醬焗意粉",     portion:"1份（10杯）", list:200, price:180, signature:false, hue:28, tags:["免餐具"], rush:false},       // ⚠ 海報 98/88
+  {id:"S15", cat:"snack", name:"涼拌麻醬低溫慢煮雞絲粉皮", portion:"1份（10杯）", list:248, price:220, signature:false, hue:52, tags:["凍食佳","免餐具"], rush:false}, // ⚠ 海報 120/108
+
+  /* ---------- 飲品 · 350ml ---------- */
+  {id:"B01", cat:"drink", name:"菊花馬蹄爽",         list:28, price:26, signature:false, hue:50,  tags:["低糖"], rush:false},
+  {id:"B02", cat:"drink", name:"竹蔗茅根檸檬水",     list:28, price:26, signature:false, hue:70,  tags:["低糖"], rush:false},
+  {id:"B03", cat:"drink", name:"雪梨白涼粉冬瓜茶",   list:32, price:28, signature:true,  hue:100, tags:[],       rush:false},
+  {id:"B04", cat:"drink", name:"椰汁西米斑斕凍",     list:34, price:30, signature:false, hue:90,  tags:[],       rush:false},
+  {id:"B05", cat:"drink", name:"楊枝甘露",           list:38, price:34, signature:false, hue:38,  tags:[],       rush:false},  // 同糖水版係兩個唔同 SKU
+  {id:"B06", cat:"drink", name:"紅豆芋泥椰汁",       list:38, price:34, signature:false, hue:320, tags:[],       rush:false},
+  {id:"B07", cat:"drink", name:"桃膠椰汁西米",       list:38, price:34, signature:false, hue:56,  tags:[],       rush:false},
+  {id:"B08", cat:"drink", name:"菠蘿脆皮椰汁",       list:38, price:34, signature:false, hue:46,  tags:[],       rush:false}
+];
+
+/* 落單時揀嘅場合（唔係篩選） */
+const OCCASIONS = ["會議茶點", "午餐到會", "公司活動", "培訓聚會", "其他"];
