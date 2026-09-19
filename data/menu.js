@@ -55,6 +55,14 @@ const SERVING = [
 ];
 // 系列（xlsx：子分類 欄）唔使喺度列，由餐單資料自動抽出嚟
 
+/* 送貨區域 → 地區（十八區） */
+const DISTRICTS = {
+  "香港島": ["中西區", "灣仔區", "東區", "南區"],
+  "九龍":   ["油尖旺區", "深水埗區", "九龍城區", "黃大仙區", "觀塘區"],
+  "新界":   ["葵青區", "荃灣區", "屯門區", "元朗區", "北區", "大埔區", "沙田區", "西貢區"],
+  "離島":   ["離島區"]
+};
+
 /* ============================================================
    3. 餐單資料 — 由《NAN 辦公室到會MENU.xlsx》生成，唔好手改
       改咗 xlsx 之後行：  python3 tools/build-menu.py
@@ -70,7 +78,7 @@ const SERVING = [
 /* MENU:BEGIN */
 const MENU_ALL = [
   /* ---------- 糖水 ---------- */
-  {id:"DS01", cat:"dessert", sub:"芒果系列", name:"楊枝甘露", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:43, price:38, signature:true, active:true, rush:false, tags:["凍食佳"], img:"images/楊枝甘露.JPG"},
+  {id:"DS01", cat:"dessert", sub:"芒果系列", name:"楊枝甘露", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:43, price:38, signature:true, active:true, rush:false, tags:["凍食佳"], hue:309},
   {id:"DS02", cat:"dessert", sub:"芒果系列", name:"芒果西米小丸子", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:184},
   {id:"DS03", cat:"dessert", sub:"芒果系列", name:"芒果西米三色芋圓", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:89},
   {id:"DS04", cat:"dessert", sub:"椰汁系列", name:"椰汁斑斕大滿貫", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:43, price:38, signature:false, active:true, rush:false, tags:["凍食佳"], hue:227},

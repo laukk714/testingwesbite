@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#0A0908">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -85,15 +85,9 @@
           <div class="cgroup" id="servOpts"></div>
         </div>
         <div class="fgroup">
-          <h2>每份價錢上限</h2>
-          <input type="range" class="range" id="priceMax" min="20" max="400" step="10" value="400">
-          <div class="range-val" id="priceLbl">唔限價錢</div>
-        </div>
-        <div class="fgroup">
           <label class="opt"><input type="checkbox" id="onlyPicked"><span>只睇已揀</span><span class="n" id="pickedN">0</span></label>
         </div>
         <button class="reset" id="reset">清除篩選</button>
-        <a class="custom-cta" id="customCta" href="#" target="_blank" rel="noopener">度身定製您的到會餐單</a>
         <p class="side-note">價錢為每「份」總價，已列明份量。</p>
       </div>
     </aside>
@@ -115,84 +109,75 @@
     <button class="back-link" id="backToMenu" type="button">← 返回餐單</button>
     <h2>送貨資料</h2>
     <p class="sub">我哋會用 WhatsApp 同你確認訂單同付款方法。<button class="link" id="reviewCart" type="button">睇／修改已揀食物</button></p>
-    <!-- 三個短小節；短欄位兩個一行（手機都係） -->
-    <fieldset class="fset">
-      <legend>聯絡人</legend>
-      <div class="grid2">
-        <div class="field" data-f="name">
-          <label for="fName">姓名</label>
-          <input id="fName" type="text" autocomplete="name" placeholder="陳大文">
-          <div class="err"></div>
-        </div>
-        <div class="field" data-f="phone">
-          <label for="fPhone">電話</label>
-          <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
-          <div class="err"></div>
-        </div>
-        <div class="field wide" data-f="company">
-          <label for="fCompany">公司 <span class="hint">選填</span></label>
-          <input id="fCompany" type="text" autocomplete="organization" placeholder="ABC Limited">
-          <div class="err"></div>
-        </div>
+    <!-- 次序：姓名・電話 → 日期・時間 → 公司 → 區域・地區 → 地址 → 送上寫字樓？→ 樓層／單位 -->
+    <div class="grid2">
+      <div class="field" data-f="name">
+        <label for="fName">姓名</label>
+        <input id="fName" type="text" autocomplete="name" placeholder="陳大文">
+        <div class="err"></div>
       </div>
-    </fieldset>
-
-    <fieldset class="fset">
-      <legend>送貨</legend>
-      <div class="grid2">
-        <div class="field" data-f="date">
-          <label for="fDate">日期 <span class="hint" id="dateHint"></span></label>
-          <input id="fDate" type="date">
-          <div class="err"></div>
-        </div>
-        <div class="field" data-f="time">
-          <label for="fTime">時間</label>
-          <select id="fTime"><option value="">請揀</option></select>
-          <div class="err"></div>
-        </div>
-        <div class="field wide" data-f="addr">
-          <label for="fAddr">大廈／屋苑／街道 <span class="hint">打幾隻字再喺清單揀</span></label>
-          <div class="addr-box">
-            <input id="fAddr" type="text" autocomplete="off" role="combobox"
-                   aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
-                   placeholder="例如：時代廣場、太古坊">
-            <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
-          </div>
-          <div class="picked-addr" id="pickedAddr" hidden></div>
-          <div class="map" id="map" hidden></div>
-          <div class="err"></div>
-        </div>
-        <div class="field" data-f="unit">
-          <label for="fUnit">樓層／單位</label>
-          <input id="fUnit" type="text" placeholder="12樓 1203室">
-          <div class="err"></div>
-        </div>
-        <div class="field" data-f="district">
-          <label for="fDistrict">地區</label>
-          <select id="fDistrict">
-            <option value="">請揀</option>
-            <option>香港島</option><option>九龍</option><option>新界</option><option>離島</option>
-          </select>
-          <div class="err"></div>
-        </div>
-        <div class="field wide" data-f="walkup">
-          <label class="opt toggle"><input type="checkbox" id="fWalkup"><span>送上寫字樓／樓上 <span class="hint" id="walkupNote">+$100，預設地面交收</span></span></label>
-          <div class="err"></div>
-        </div>
+      <div class="field" data-f="phone">
+        <label for="fPhone">電話</label>
+        <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
+        <div class="err"></div>
       </div>
-    </fieldset>
-
-    <fieldset class="fset">
-      <legend>其他</legend>
-      <details class="fold" id="remarkFold">
-        <summary>＋ 加備註 <span class="hint">食物敏感、餐具數量等</span></summary>
-        <div class="field wide" data-f="remark">
-          <label for="fRemark" class="sr-only">備註</label>
-          <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對堅果敏感"></textarea>
-          <div class="err"></div>
+      <div class="field" data-f="date">
+        <label for="fDate">日期 <span class="hint" id="dateHint"></span></label>
+        <input id="fDate" type="date">
+        <div class="err"></div>
+      </div>
+      <div class="field" data-f="time">
+        <label for="fTime">時間</label>
+        <select id="fTime"><option value="">請揀</option></select>
+        <div class="err"></div>
+      </div>
+      <div class="field wide" data-f="company">
+        <label for="fCompany">公司 <span class="hint">選填</span></label>
+        <input id="fCompany" type="text" autocomplete="organization" placeholder="ABC Limited">
+        <div class="err"></div>
+      </div>
+      <div class="field" data-f="region">
+        <label for="fRegion">區域</label>
+        <select id="fRegion"><option value="">請揀</option></select>
+        <div class="err"></div>
+      </div>
+      <div class="field" data-f="district">
+        <label for="fDistrict">地區</label>
+        <select id="fDistrict" disabled><option value="">先揀區域</option></select>
+        <div class="err"></div>
+      </div>
+      <div class="field wide" data-f="addr">
+        <label for="fAddr">大廈／屋苑／街道 <span class="hint">打幾隻字再喺清單揀</span></label>
+        <div class="addr-box">
+          <input id="fAddr" type="text" autocomplete="off" role="combobox"
+                 aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
+                 placeholder="例如：時代廣場、太古坊">
+          <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
         </div>
-      </details>
-    </fieldset>
+        <div class="picked-addr" id="pickedAddr" hidden></div>
+        <div class="map" id="map" hidden></div>
+        <div class="err"></div>
+      </div>
+      <div class="field wide" data-f="walkup">
+        <label class="opt toggle"><input type="checkbox" id="fWalkup" aria-controls="unitField"><span>送上寫字樓／樓上 <span class="hint" id="walkupNote">+$100，預設地面交收</span></span></label>
+        <div class="err"></div>
+      </div>
+      <!-- 剔咗「送上寫字樓」先出現，先至要填 -->
+      <div class="field wide" data-f="unit" id="unitField" hidden>
+        <label for="fUnit">樓層／單位</label>
+        <input id="fUnit" type="text" placeholder="12樓 1203室">
+        <div class="err"></div>
+      </div>
+    </div>
+
+    <details class="fold" id="remarkFold">
+      <summary>＋ 加備註 <span class="hint">食物敏感、餐具數量等</span></summary>
+      <div class="field wide" data-f="remark">
+        <label for="fRemark" class="sr-only">備註</label>
+        <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對堅果敏感"></textarea>
+        <div class="err"></div>
+      </div>
+    </details>
 
     <div class="policy">
       <div class="field" data-f="terms">
@@ -233,7 +218,8 @@
       </div>
 
       <div class="slip-sec">
-        <div class="stot"><span>小計（已計 9 折）</span><span id="oSub"></span></div>
+        <div class="stot"><span>原價小計</span><span><s id="oList"></s></span></div>
+        <div class="stot disc"><span>全單9折 <span class="saved" id="oSaved"></span></span><span id="oSub"></span></div>
         <div class="stot"><span id="oFeeLbl">運費</span><span id="oFee"></span></div>
         <div class="stot" id="oWalkRow"><span>送上寫字樓</span><span id="oWalk"></span></div>
         <div class="stot grand"><span>總計</span><span id="oTotal"></span></div>

@@ -94,7 +94,6 @@ Filter groups and where they come from:
 | 只睇皇牌 | 皇牌推介 |
 | 飲食需要 | `DIETS` in `data/menu.js` ↔ 素食/可走葷 · 微辣 · 含堅果 columns |
 | 食用需要 | `SERVING` in `data/menu.js` ↔ 凍食佳 · 免餐具 · 建議60分鐘內食用 columns (可以放耐啲 = hide the 60-minute items) |
-| 每份價錢上限 | 會員價 |
 
 To add a new Y/N column as a filter: add the tag mapping in `tools/build-menu.py`
 (`TAG_COLS`) and a row in `DIETS` or `SERVING`.
@@ -121,7 +120,7 @@ the **shop name**, and round icons on the right:
 
 - **Search / filter (funnel)** — phones only (≤880px), step 1 only. Opens the
   搵食物／篩選 popup. There is only one set of controls (`#fpanel`: search box,
-  分類 / 系列 / 皇牌 / 飲食需要 / 食用需要 chips, price slider, 只睇已揀, 清除篩選): on wide screens it
+  分類 / 系列 / 皇牌 / 飲食需要 / 食用需要 chips, 只睇已揀, 清除篩選): on wide screens it
   lives in the left sidebar and the funnel is hidden; on phones the sidebar is
   hidden and the funnel moves the panel into the dialog while open. Badge =
   number of active filters (search counts as one); the button at the bottom
