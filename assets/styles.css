@@ -48,7 +48,7 @@ body{
   font-family:var(--sans);
   font-size:16px;
   line-height:1.6;
-  padding-bottom:104px; /* 留位俾底部落單條 */
+  padding-bottom:72px; /* 留位俾底部落單條 */
 }
 img{display:block;max-width:100%}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -151,7 +151,7 @@ body:not([data-view="1"]) #filterResetBtn{display:none}
 /* 側欄 sticky；視窗矮過個欄就喺欄入面捲（扣走招牌同底部落單條嘅高度） */
 .filters{
   position:sticky;top:calc(var(--head-h) + 1.25rem);
-  max-height:calc(100dvh - var(--head-h) - 1.25rem - 104px);
+  max-height:calc(100dvh - var(--head-h) - 1.25rem - 72px);
   overflow-y:auto;overscroll-behavior:contain;
   padding-right:.5rem;margin-right:-.5rem;          /* 留位俾 scrollbar，唔遮住內容 */
   scrollbar-width:thin;scrollbar-color:var(--bg-shade) transparent;
@@ -465,19 +465,20 @@ body:not([data-view="1"]) #filterResetBtn{display:none}
   position:fixed;inset-inline:0;bottom:0;z-index:1100;   /* 要高過 Leaflet 地圖 */
   background:var(--surface-dark);color:var(--text-on-dark);
 }
+/* 矮身：總數同「已揀 N 款」放同一行 */
 .orderbar-in{
-  max-width:var(--maxw);margin:0 auto;padding:.85rem 1.25rem;
-  display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;
+  max-width:var(--maxw);margin:0 auto;padding:.5rem 1.25rem;
+  display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
 }
-.tally{display:flex;flex-direction:column;line-height:1.35}
-.tally .cnt{font-size:.82rem;color:var(--text-on-dark-muted)}
-.tally .amt{font-weight:900;font-size:1.55rem;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.breakdown{font-size:.8rem;color:var(--text-on-dark-muted);border-inline-start:1px solid var(--line-on-dark);padding-inline-start:1.25rem;line-height:1.55}
+.tally{display:flex;align-items:baseline;gap:.6rem;line-height:1.2}
+.tally .cnt{font-size:.8rem;color:var(--text-on-dark-muted)}
+.tally .amt{font-weight:900;font-size:1.3rem;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.breakdown{font-size:.76rem;color:var(--text-on-dark-muted);border-inline-start:1px solid var(--line-on-dark);padding-inline-start:1rem;line-height:1.4}
 .breakdown span{font-variant-numeric:tabular-nums;color:var(--text-on-dark)}
 .breakdown .free{color:var(--accent)}
 /* 底部兩個掣同一個尺寸：高 2.9rem、同一字級；淨係顏色唔同 */
 .bar-back,.submit{
-  height:2.9rem;padding:0 1.6rem;border-radius:var(--pill);
+  height:2.5rem;padding:0 1.4rem;border-radius:var(--pill);
   font-size:1rem;font-weight:700;letter-spacing:.08em;white-space:nowrap;
 }
 .bar-back{
@@ -565,7 +566,7 @@ body:not([data-view="1"]) #filterResetBtn{display:none}
   .dish.on .tick span{display:inline}
   .dish-err{grid-column:2/-1}
   .breakdown{display:none}
-  .bar-back,.submit{height:2.7rem;padding:0 1.2rem;font-size:.95rem}
+  .bar-back,.submit{height:2.4rem;padding:0 1.1rem;font-size:.92rem}
   .orderbar-in{gap:.75rem}
   /* 彈出視窗（菜式詳情、篩選、購物車）統一闊度：左右各留 1rem */
   .sheet{max-width:none;width:calc(100vw - 2rem)}
