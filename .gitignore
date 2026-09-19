@@ -4,3 +4,6 @@ node_modules/
 .vscode/
 .idea/
 *.log
+
+# Original photos / source spreadsheet — resize into images/ before committing
+raw/

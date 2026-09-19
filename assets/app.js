@@ -1,5 +1,5 @@
 /* ============================================================
-   3. 相片位 — 有真相就用 item.img，冇就畫個碟
+   3. 相片位 — 有真相就用 item.img，冇就畫個杯／碟
    ============================================================ */
 function placeholder(hue){
   const svg =
@@ -11,215 +11,297 @@ function placeholder(hue){
     'fill="hsl(' + hue + ' 22% 52%)">相片</text></svg>';
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
-MENU.forEach(function(m){ if(!m.img) m.img = placeholder(m.hue); });
+// 只顯示「上架」嘅款（MENU_ALL 由 xlsx 生成，見 data/menu.js）
+const MENU = MENU_ALL.filter(function(m){ return m.active !== false; });
+MENU.forEach(function(m){
+  if(!m.img) m.img = placeholder(m.hue);
+  if(!m.portion) m.portion = "350ml";          // 糖水、飲品預設
+  if(!m.tags) m.tags = [];
+});
+
+const CAT = {};
+CATEGORIES.forEach(function(c){ CAT[c.key] = c; });
+const byId = function(id){ return MENU.find(function(x){ return x.id === id; }); };
+
+/* 數量單位：全部用「份」計（小食 1 份 = 幾多件已寫喺價錢後面）；
+   350ml 裝：糖水用「碗」、飲品用「杯」（1 份 = 1 碗／杯）。 */
+function cupName(m){ return m.cat === "dessert" ? "碗" : "杯"; }
+function unitName(m){ return m.unit === "ml" ? cupName(m) : "份"; }
+function qtyLabel(m, n){ return (Number(n) || 0) + " " + unitName(m); }   // 「2 份」／「3 碗」
+// 價錢後面直接寫份量：「$108 / 1份(10杯)」；杯裝 xlsx 淨係寫 350ml，補返「1碗(350ml)」
+function portionText(m){
+  if(m.unit === "ml" && m.portion && !/[杯碗]/.test(m.portion)) return "1" + cupName(m) + "(" + m.portion + ")";
+  return m.portion || unitName(m);
+}
+function perLabel(m){ return "/ " + portionText(m); }
 
 /* ============================================================
    4. 狀態
    ============================================================ */
 const state = {
   picked: {},          // {id: 數量}
-  type: "經典到會",    // 到會類型 tab
-  heads: new Set(),    // 人數
-  occs: new Set(),     // 場景
-  cats: new Set(),     // 單點美食分類
+  cats: new Set(),     // 分類（大類）
+  subs: new Set(),     // 系列（子分類）
   diets: new Set(),    // 飲食需要
+  serving: new Set(),  // 食用需要
   q: "",
-  priceMax: 3000,
+  onlyStar: false,
   onlyPicked: false,
-  submitted: false     // 撳過落單之後先即時顯示錯誤
+  collapsed: new Set(),// 收起咗嘅分類（糖水／小食／飲品）
+  step: 1,             // 1 揀食物 → 2 送貨資料 → 3 確認頁
+  foodTried: false,    // 撳過「下一步」之後先即時顯示食物錯誤
+  submitted: false     // 撳過「落單」之後先即時顯示全部錯誤
 };
 
 const $ = function(s){ return document.querySelector(s); };
 const money = function(n){ return "$" + n.toLocaleString("en-US"); };
+const esc = function(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+};
 
 /* ============================================================
-   5. 篩選側欄
+   5. 工作天（星期一至五，扣除 CONFIG.holidays）
    ============================================================ */
-function poolForType(){
-  return MENU.filter(function(m){ return m.types.indexOf(state.type) !== -1; });
+function ymd(d){
+  const p = function(n){ return String(n).padStart(2, "0"); };
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
+function isWorkingDay(d){
+  const wd = d.getDay();
+  if(wd === 0 || wd === 6) return false;
+  return CONFIG.holidays.indexOf(ymd(d)) === -1;
+}
+/* 由 from 起計，加 n 個工作天 */
+function addWorkingDays(from, n){
+  const d = new Date(from);
+  d.setHours(0,0,0,0);
+  let left = n;
+  while(left > 0){
+    d.setDate(d.getDate() + 1);
+    if(isWorkingDay(d)) left--;
+  }
+  return d;
+}
+function leadDateStr(){ return ymd(addWorkingDays(new Date(), CONFIG.leadWorkingDays)); }
+function addDays(n){ const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + n); return d; }
+function tomorrowStr(){ return ymd(addDays(1)); }
+function minDateStr(){ return CONFIG.allowRushOrders ? tomorrowStr() : leadDateStr(); }
+function isRushDate(dateStr){ return !!dateStr && dateStr < leadDateStr(); }
+
+/* ============================================================
+   6. 招牌 header — sticky 高度、臨時橫額
+      （漏斗掣喺 §7 篩選，購物車掣喺 §12）
+   ============================================================ */
+function setQ(v){
+  state.q = v.trim();
+  if($("#q").value !== v) $("#q").value = v;
+  renderMenu();
 }
 
-/* 一組 chip；多過 6 個就摺埋，用「展示更多」打開 */
-function chipGroup(el, values, set){
+function initHeader(){
+  // 招牌係 sticky：量度高度，畀篩選欄同 scroll-padding 用（--head-h）
+  const head = $(".masthead");
+  const setHeadH = function(){ document.documentElement.style.setProperty("--head-h", head.offsetHeight + "px"); };
+  setHeadH();
+  if(window.ResizeObserver) new ResizeObserver(setHeadH).observe(head);
+  window.addEventListener("resize", setHeadH);
+
+  // 臨時橫額（placeholder，規則見 README）：箭嘴收起／展開，今次瀏覽記住
+  const banner = $("#banner"), bannerBtn = $("#bannerToggle");
+  const setBanner = function(collapsed){
+    banner.classList.toggle("collapsed", collapsed);
+    bannerBtn.setAttribute("aria-expanded", String(!collapsed));
+    bannerBtn.setAttribute("aria-label", collapsed ? "展開優惠資訊" : "收起優惠資訊");
+  };
+  try{ setBanner(sessionStorage.getItem("bannerCollapsed") === "1"); }catch(e){}
+  bannerBtn.addEventListener("click", function(){
+    const collapsed = !banner.classList.contains("collapsed");
+    setBanner(collapsed);
+    try{ sessionStorage.setItem("bannerCollapsed", collapsed ? "1" : "0"); }catch(e){}
+  });
+}
+
+/* ============================================================
+   7. 篩選側欄
+   ============================================================ */
+function chipGroup(el, values, set, onChange){
   el.innerHTML = "";
-  el.classList.remove("open");
-  if(!values.length){
-    el.innerHTML = '<span class="serves">呢個類型暫時冇呢類選項</span>';
-    return;
-  }
   const wrap = document.createElement("div");
   wrap.className = "chips";
-  values.forEach(function(v, i){
+  values.forEach(function(v){
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "chip" + (i >= 6 ? " extra" : "");
+    b.className = "chip";
     b.textContent = v.label;
     b.setAttribute("aria-pressed", set.has(v.key) ? "true" : "false");
     b.addEventListener("click", function(){
       if(set.has(v.key)) set.delete(v.key); else set.add(v.key);
       b.setAttribute("aria-pressed", set.has(v.key) ? "true" : "false");
+      if(onChange) onChange();
       renderMenu();
     });
     wrap.appendChild(b);
   });
   el.appendChild(wrap);
-
-  if(values.length > 6){
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "more";
-    more.setAttribute("aria-expanded", "false");
-    more.innerHTML = '<span class="caret">⌄</span> 展示更多';
-    more.addEventListener("click", function(){
-      const open = el.classList.toggle("open");
-      more.setAttribute("aria-expanded", String(open));
-      more.innerHTML = '<span class="caret">⌄</span> ' + (open ? "收起" : "展示更多");
-    });
-    el.appendChild(more);
-  }
 }
 
-/* chip 選項由「當前類型有嘅食物」推算出嚟，唔會出現揀完零結果嘅死選項 */
-function buildChips(){
-  const pool = poolForType();
-
-  const heads = HEADCOUNTS
-    .filter(function(h){ return pool.some(function(m){ return m.serves >= h.min && m.serves <= h.max; }); })
-    .map(function(h){ return { key: h.label, label: h.label }; });
-
-  const occs = OCCASIONS
-    .filter(function(o){ return pool.some(function(m){ return m.occ.indexOf(o) !== -1; }); })
-    .map(function(o){ return { key: o, label: o }; });
-
-  const cats = CATEGORIES
-    .filter(function(c){ return c.indexOf("套餐") === -1 && pool.some(function(m){ return m.cat === c; }); })
-    .map(function(c){ return { key: c, label: c }; });
-
-  const diets = DIETS.map(function(d){ return { key: d.key, label: d.label }; });
-
-  chipGroup($("#headOpts"), heads, state.heads);
-  chipGroup($("#occOpts"), occs, state.occs);
-  chipGroup($("#catOpts"), cats, state.cats);
-  chipGroup($("#dietOpts"), diets, state.diets);
-}
-
-function buildTabs(){
-  const box = $("#typeTabs");
-  box.innerHTML = "";
-  TYPES.forEach(function(t){
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "ttab";
-    b.setAttribute("role", "tab");
-    b.setAttribute("aria-selected", String(t.key === state.type));
-    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon + "</svg><span>" + t.label + "</span>";
-    b.addEventListener("click", function(){
-      if(state.type === t.key) return;
-      state.type = t.key;
-      state.heads.clear(); state.occs.clear(); state.cats.clear();
-      box.querySelectorAll(".ttab").forEach(function(x, i){
-        x.setAttribute("aria-selected", String(TYPES[i].key === state.type));
-      });
-      buildChips();
-      renderMenu();
-    });
-    box.appendChild(b);
+// 系列 chips：由餐單抽出，揀咗分類就只顯示嗰啲分類嘅系列
+function subOptions(){
+  const seen = new Set(), out = [];
+  MENU.forEach(function(m){
+    if(!m.sub) return;
+    if(state.cats.size && !state.cats.has(m.cat)) return;
+    if(seen.has(m.sub)) return;
+    seen.add(m.sub);
+    out.push({ key: m.sub, label: m.sub.replace(/系列/g, "") });   // 「芒果系列」→「芒果」
   });
+  return out;
+}
+
+function buildSubChips(){
+  // 分類變咗，唔再見到嘅系列要一併取消
+  const allowed = new Set(subOptions().map(function(o){ return o.key; }));
+  state.subs.forEach(function(k){ if(!allowed.has(k)) state.subs.delete(k); });
+  chipGroup($("#subOpts"), subOptions(), state.subs);
+}
+
+function buildChips(){
+  chipGroup($("#catOpts"), CATEGORIES.map(function(c){ return { key: c.key, label: c.label }; }), state.cats, buildSubChips);
+  buildSubChips();
+  chipGroup($("#dietOpts"), DIETS.map(function(d){ return { key: d.key, label: d.label }; }), state.diets);
+  chipGroup($("#servOpts"), SERVING.map(function(d){ return { key: d.key, label: d.label }; }), state.serving);
+}
+
+// 有幾多個篩選條件生效（漏斗掣個數字）
+function activeFilterCount(){
+  return state.cats.size + state.subs.size + state.diets.size + state.serving.size +
+         (state.onlyStar ? 1 : 0) + (state.onlyPicked ? 1 : 0) +
+         (state.q ? 1 : 0);
+}
+
+function updateFilterUi(){
+  const n = activeFilterCount();
+  $("#filterN").textContent = n;
+  $("#filterN").hidden = n === 0;
+  $("#filterResetBtn").hidden = n === 0;        // 有篩選先顯示「清除篩選」掣
+  const shown = visibleItems().length;
+  $("#filterDone").textContent = n === 0 ? "顯示全部 " + MENU.length + " 款" : "顯示 " + shown + " 款";
 }
 
 function buildFilters(){
-  buildTabs();
   buildChips();
 
-  $("#q").addEventListener("input", function(e){ state.q = e.target.value.trim(); renderMenu(); });
+  $("#q").addEventListener("input", function(e){ setQ(e.target.value); });
 
-  $("#priceMax").addEventListener("input", function(e){
-    state.priceMax = +e.target.value;
-    $("#priceLbl").textContent = state.priceMax >= 3000 ? "唔限價錢" : money(state.priceMax) + " 或以下";
-    renderMenu();
-  });
-
+  $("#onlyStar").addEventListener("change", function(e){ state.onlyStar = e.target.checked; renderMenu(); });
   $("#onlyPicked").addEventListener("change", function(e){ state.onlyPicked = e.target.checked; renderMenu(); });
 
   $("#reset").addEventListener("click", function(){
-    state.cats.clear(); state.diets.clear(); state.heads.clear(); state.occs.clear();
-    state.q = ""; state.priceMax = 3000; state.onlyPicked = false;
-    $("#q").value = ""; $("#priceMax").value = 3000; $("#priceLbl").textContent = "唔限價錢";
-    $("#onlyPicked").checked = false;
+    state.cats.clear(); state.subs.clear(); state.diets.clear(); state.serving.clear();
+    state.onlyPicked = false; state.onlyStar = false;
+    setQ("");
+    $("#onlyPicked").checked = false; $("#onlyStar").checked = false;
     buildChips();
     renderMenu();
   });
 
-  $("#fToggle").addEventListener("click", function(){
-    const open = $("#fpanel").classList.toggle("open");
-    $("#fToggle").setAttribute("aria-expanded", String(open));
-  });
+  // 招牌「清除篩選」掣 = 側欄個 清除篩選
+  $("#filterResetBtn").addEventListener("click", function(){ $("#reset").click(); });
 
-  // 度身定製 → 直接開 WhatsApp
-  const custom = "想度身定製一個到會餐單：\n人數：\n日期／時間：\n預算：\n特別要求：";
-  $("#customCta").href = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(custom);
+  // 漏斗掣（窄版）→ 將 #fpanel（搜尋 + 篩選）搬入彈出視窗；關閉就搬返側欄
+  const dlg = $("#filterDlg"), panel = $("#fpanel");
+  $("#filterBtn").addEventListener("click", function(){
+    $("#filterHost").appendChild(panel);
+    updateFilterUi();
+    dlg.showModal();
+  });
+  dlg.addEventListener("close", function(){ $("#filtersAside").appendChild(panel); });
+  dlg.addEventListener("click", function(e){ if(e.target === e.currentTarget) e.currentTarget.close(); });
+
 }
 
 function visibleItems(){
-  // 「只睇已揀」跨類型顯示，唔會被其他篩選遮住
+  // 「只睇已揀」唔會被其他篩選遮住
   if(state.onlyPicked){
     return MENU.filter(function(m){ return m.id in state.picked; });
   }
+  const rush = isRushDate($("#fDate").value);
   return MENU.filter(function(m){
-    if(m.types.indexOf(state.type) === -1) return false;
+    if(rush && !m.rush) return false;
     if(state.cats.size && !state.cats.has(m.cat)) return false;
-    if(state.occs.size && !m.occ.some(function(o){ return state.occs.has(o); })) return false;
-    if(state.heads.size){
-      const fits = HEADCOUNTS.some(function(h){
-        return state.heads.has(h.label) && m.serves >= h.min && m.serves <= h.max;
-      });
-      if(!fits) return false;
-    }
-    if(m.price > state.priceMax) return false;
+    if(state.subs.size && !state.subs.has(m.sub)) return false;
+    if(state.onlyStar && !m.signature) return false;
     if(state.q){
-      const hay = m.name + m.desc + m.cat + m.tags.join("") + m.occ.join("");
+      const hay = m.name + (m.portion || "") + CAT[m.cat].label + (m.sub || "") + m.tags.join("");
       if(hay.toLowerCase().indexOf(state.q.toLowerCase()) === -1) return false;
     }
-    for(const d of DIETS){
-      if(!state.diets.has(d.key)) continue;
-      const has = m.tags.indexOf(d.key) !== -1;
-      if(d.mode === "include" && !has) return false;
-      if(d.mode === "exclude" && has) return false;
-    }
+    const tagOk = function(list, picked){
+      for(const d of list){
+        if(!picked.has(d.key)) continue;
+        const has = m.tags.indexOf(d.key) !== -1;
+        if(d.mode === "include" && !has) return false;
+        if(d.mode === "exclude" && has) return false;
+      }
+      return true;
+    };
+    if(!tagOk(DIETS, state.diets) || !tagOk(SERVING, state.serving)) return false;
     return true;
   });
 }
 
 /* ============================================================
-   6. 畫餐單
+   8. 畫餐單
    ============================================================ */
-function tagClass(t){
-  if(t === "素食") return "tag veg";
-  if(t === "辣") return "tag hot";
-  if(t === "招牌") return "tag star";
-  return "tag";
+function tagHtml(m){
+  const all = (m.signature ? ["皇牌"] : []).concat(m.tags);
+  return all.map(function(t){
+    const cls = TAG_STYLE[t] || "";
+    return '<span class="tag' + (cls ? " " + cls : "") + '">' + esc(t) + "</span>";
+  }).join("");
+}
+
+function pricePill(m){
+  return '<span class="pricepill"><s>' + money(m.list) + "</s>" +
+         '<span class="now">' + money(m.price) + '</span><span class="per">' + perLabel(m) + '</span></span>';
 }
 
 function renderMenu(){
   const wrap = $("#menu");
   const items = visibleItems();
   wrap.innerHTML = "";
+  updateFilterUi();
+
+  // 急單提示
+  const rush = isRushDate($("#fDate").value);
+  const note = $("#rushNote");
+  note.hidden = !rush;
+  if(rush) note.innerHTML = "你揀咗 <b>" + esc($("#fDate").value) + "</b>，未夠 " + CONFIG.leadWorkingDays +
+    " 個工作天。急單只提供部分菜式，下面只顯示急單可做嘅款。";
 
   if(!items.length){
-    wrap.innerHTML = '<div class="empty"><b>冇食物合到呢啲條件</b>試下放寬價錢，或者清除篩選。</div>';
+    wrap.innerHTML = '<div class="empty"><b>冇食物合到呢啲條件</b>試下減少篩選條件，或者清除篩選。</div>';
     updateBar();
     return;
   }
 
   CATEGORIES.forEach(function(cat){
-    const inCat = items.filter(function(m){ return m.cat === cat; });
+    const inCat = items.filter(function(m){ return m.cat === cat.key; });
     if(!inCat.length) return;
 
+    const collapsed = state.collapsed.has(cat.key);
+    const pickedHere = inCat.filter(function(m){ return m.id in state.picked; }).length;
     const sec = document.createElement("section");
-    sec.className = "course";
+    sec.className = "course" + (collapsed ? " collapsed" : "");
+    // 成個分類標題係一個掣：撳一下收起／展開下面嘅菜式
     sec.innerHTML =
-      '<div class="course-head"><h2>' + cat + '</h2>' +
-      '<span class="note">' + inCat.length + ' 款</span></div>';
+      '<button type="button" class="course-head" data-course="' + cat.key + '" aria-expanded="' + (!collapsed) + '">' +
+        '<h2>' + esc(cat.label) + '</h2>' +
+        '<span class="note">' + esc(cat.note || "") + '</span>' +
+        '<span class="n">' + inCat.length + ' 款' + (pickedHere ? '・已揀 ' + pickedHere : '') + '</span>' +
+        '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 8.3a1 1 0 0 1 1.4 0L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.4l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.4z"/></svg>' +
+      '</button>';
 
     inCat.forEach(function(m){
       const on = m.id in state.picked;
@@ -227,27 +309,20 @@ function renderMenu(){
       row.className = "dish" + (on ? " on" : "");
       row.id = "dish-" + m.id;
       row.innerHTML =
-        '<img src="' + m.img + '" alt="' + m.name + '" loading="lazy">' +
+        '<img src="' + m.img + '" alt="' + esc(m.name) + '" loading="lazy" data-sheet="' + m.id + '">' +
         '<div class="dish-body">' +
-          '<div class="dish-line">' +
-            '<span class="dish-name">' + m.name + '</span>' +
-            '<span class="leader"></span>' +
-            '<span class="price">' + money(m.price) + '</span>' +
-          '</div>' +
-          '<p class="desc">' + m.desc + '</p>' +
-          '<div class="meta">' +
-            '<span class="serves">約 ' + m.serves + ' 位</span>' +
-            m.tags.map(function(t){ return '<span class="' + tagClass(t) + '">' + t + '</span>'; }).join("") +
-          '</div>' +
+          '<div class="dish-name"><button type="button" data-sheet="' + m.id + '">' + esc(m.name) + '</button></div>' +
+          '<div class="dish-line">' + pricePill(m) + '</div>' +
+          (m.tags.length || m.signature ? '<div class="meta">' + tagHtml(m) + '</div>' : "") +
         '</div>' +
         '<div class="pick">' +
           '<label class="tick"><input type="checkbox" data-pick="' + m.id + '"' + (on ? " checked" : "") + '>' +
             '<span>' + (on ? "已揀" : "揀呢款") + '</span></label>' +
           '<div class="qty"' + (on ? "" : " hidden") + '>' +
-            '<button type="button" data-step="-1" data-id="' + m.id + '" aria-label="減少 ' + m.name + '">−</button>' +
+            '<button type="button" data-step="-1" data-id="' + m.id + '" aria-label="減少 ' + esc(m.name) + '">−</button>' +
             '<input type="number" data-qty="' + m.id + '" value="' + (on ? state.picked[m.id] : 1) +
-              '" min="1" max="' + CONFIG.maxQty + '" inputmode="numeric" aria-label="' + m.name + ' 數量">' +
-            '<button type="button" data-step="1" data-id="' + m.id + '" aria-label="增加 ' + m.name + '">+</button>' +
+              '" min="1" max="' + CONFIG.maxQty + '" inputmode="numeric" aria-label="' + esc(m.name) + ' 數量（' + esc(unitName(m)) + '）">' +
+            '<button type="button" data-step="1" data-id="' + m.id + '" aria-label="增加 ' + esc(m.name) + '">+</button>' +
           '</div>' +
           '<span class="line-total"></span>' +
         '</div>' +
@@ -256,6 +331,12 @@ function renderMenu(){
       paintRow(m.id);
     });
 
+    if(cat.foot){
+      const f = document.createElement("div");
+      f.className = "course-foot";
+      f.textContent = cat.foot;
+      sec.appendChild(f);
+    }
     wrap.appendChild(sec);
   });
 
@@ -266,7 +347,7 @@ function renderMenu(){
 function paintRow(id){
   const row = document.getElementById("dish-" + id);
   if(!row) return;
-  const m = MENU.find(function(x){ return x.id === id; });
+  const m = byId(id);
   const on = id in state.picked;
   const qtyBox = row.querySelector(".qty");
   const input = row.querySelector("[data-qty]");
@@ -275,9 +356,11 @@ function paintRow(id){
   const lineTotal = row.querySelector(".line-total");
   const label = row.querySelector(".tick span");
   const errBox = row.querySelector(".dish-err");
+  const tick = row.querySelector("[data-pick]");
 
   row.classList.toggle("on", on);
   qtyBox.hidden = !on;
+  tick.checked = on;
   label.textContent = on ? "已揀" : "揀呢款";
 
   if(!on){
@@ -289,17 +372,18 @@ function paintRow(id){
   }
 
   const raw = state.picked[id];
-  const err = qtyError(raw);
+  if(input.value !== String(raw)) input.value = raw;
+  const err = qtyError(raw, m);
   minus.disabled = !(raw > 1);
   plus.disabled = !(raw < CONFIG.maxQty);
 
   if(err){
     lineTotal.textContent = "";
     errBox.textContent = err;
-    row.classList.toggle("bad", state.submitted);
-    qtyBox.classList.toggle("bad", state.submitted);
+    row.classList.toggle("bad", state.submitted || state.foodTried);
+    qtyBox.classList.toggle("bad", state.submitted || state.foodTried);
   }else{
-    lineTotal.textContent = raw + " × " + money(m.price) + " = " + money(raw * m.price);
+    lineTotal.textContent = qtyLabel(m, raw) + " × " + money(m.price) + " = " + money(raw * m.price);
     errBox.textContent = "";
     row.classList.remove("bad");
     qtyBox.classList.remove("bad");
@@ -307,14 +391,60 @@ function paintRow(id){
 }
 
 /* ============================================================
-   7. 數量 / 剔選 事件（用事件委派，行數少啲）
+   9. 菜式詳情 sheet
    ============================================================ */
-function qtyError(v){
+const SHEET = { id: null };
+
+function openSheet(id){
+  const m = byId(id);
+  if(!m) return;
+  SHEET.id = id;
+  $("#shImg").src = m.img;
+  $("#shImg").alt = m.name;
+  $("#shCat").textContent = CAT[m.cat].label + (CAT[m.cat].note ? "・" + CAT[m.cat].note : "");
+  $("#shName").textContent = m.name;
+  $("#shPrice").innerHTML = pricePill(m);
+  $("#shTags").innerHTML = tagHtml(m) || '<span class="tag">冇特別標籤</span>';
+  $("#shQtyLbl").textContent = "數量（" + unitName(m) + "）";
+  const cur = Number(state.picked[id]) || 0;
+  $("#shQty").value = cur > 0 ? cur : 1;
+  $("#shAdd").textContent = cur > 0 ? "更新數量" : "加入訂單";
+  sheetLine();
+  $("#sheet").showModal();
+}
+
+function sheetQty(){ return Math.max(0, Math.min(CONFIG.maxQty, Math.floor(Number($("#shQty").value) || 0))); }
+function sheetSet(n){ $("#shQty").value = n; sheetLine(); }
+function sheetLine(){
+  const m = byId(SHEET.id), n = sheetQty();
+  $("#shLine").textContent = n > 0 ? qtyLabel(m, n) + " × " + money(m.price) + " = " + money(n * m.price) : "";
+}
+
+$("#shMinus").addEventListener("click", function(){ sheetSet(Math.max(0, sheetQty() - 1)); });
+$("#shPlus").addEventListener("click", function(){ sheetSet(Math.min(CONFIG.maxQty, sheetQty() + 1)); });
+$("#shQty").addEventListener("change", function(){ sheetSet(sheetQty()); });
+$("#shQty").addEventListener("input", sheetLine);
+$("#shAdd").addEventListener("click", function(){
+  const n = sheetQty();
+  if(n <= 0) delete state.picked[SHEET.id]; else state.picked[SHEET.id] = n;
+  paintRow(SHEET.id);
+  updateBar();
+  revalidate();
+});
+$("#sheet").addEventListener("click", function(e){
+  if(e.target === e.currentTarget) e.currentTarget.close();   // 撳背景關閉
+});
+
+/* ============================================================
+   10. 數量 / 剔選 事件（用事件委派，行數少啲）
+   ============================================================ */
+function qtyError(v, m){
+  const u = m ? unitName(m) : "份";
   if(v === "" || v === null || typeof v === "undefined") return "請填數量";
   const n = Number(v);
   if(!Number.isInteger(n)) return "數量要係整數";
-  if(n < 1) return "數量最少 1 份";
-  if(n > CONFIG.maxQty) return "單一款最多 " + CONFIG.maxQty + " 份，多過呢個數請致電落單";
+  if(n < 1) return "最少 1 " + u;
+  if(n > CONFIG.maxQty) return "單一款最多 " + CONFIG.maxQty + " " + u + "，多過呢個數請 WhatsApp 落單";
   return "";
 }
 
@@ -329,7 +459,7 @@ document.addEventListener("change", function(e){
     }
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
   }
 });
 
@@ -342,7 +472,7 @@ document.addEventListener("input", function(e){
     state.picked[id] = raw === "" ? "" : Number(raw);
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
   }
 });
 
@@ -354,70 +484,206 @@ document.addEventListener("click", function(e){
     const cur = Number(state.picked[id]) || 0;
     const next = Math.min(CONFIG.maxQty, Math.max(1, cur + Number(step.dataset.step)));
     state.picked[id] = next;
-    const input = document.querySelector('[data-qty="' + id + '"]');
-    if(input) input.value = next;
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
+    return;
+  }
+  const sh = e.target.closest ? e.target.closest("[data-sheet]") : null;
+  if(sh){ openSheet(sh.dataset.sheet); return; }
+  const head = e.target.closest ? e.target.closest("[data-course]") : null;
+  if(head){
+    const key = head.dataset.course, sec = head.closest(".course");
+    if(state.collapsed.has(key)) state.collapsed.delete(key); else state.collapsed.add(key);
+    sec.classList.toggle("collapsed", state.collapsed.has(key));
+    head.setAttribute("aria-expanded", String(!state.collapsed.has(key)));
   }
 });
 
 /* ============================================================
-   8. 埋單計數
+   11. 埋單計數
+      line_total = 9折價 × 份數
+      subtotal   = Σ line_total
+      運費       = subtotal >= 1500 ? 0 : 標準運費
+      送上寫字樓 = +100
    ============================================================ */
 function totals(){
-  let subtotal = 0, count = 0, servings = 0;
+  let subtotal = 0, listTotal = 0, count = 0;
   Object.keys(state.picked).forEach(function(id){
     const n = Number(state.picked[id]);
     if(!Number.isInteger(n) || n < 1) return;
-    const m = MENU.find(function(x){ return x.id === id; });
+    const m = byId(id);
     subtotal += m.price * n;
-    servings += m.serves * n;
+    listTotal += m.list * n;
     count += n;
   });
   const fee = (subtotal === 0 || subtotal >= CONFIG.freeDeliveryAt) ? 0 : CONFIG.deliveryFee;
-  return { subtotal: subtotal, fee: fee, total: subtotal + fee, count: count, servings: servings,
-           kinds: Object.keys(state.picked).length };
+  const walkup = (subtotal > 0 && $("#fWalkup").checked) ? CONFIG.walkupSurcharge : 0;
+  return { subtotal: subtotal, listTotal: listTotal, saved: listTotal - subtotal,
+           fee: fee, walkup: walkup, total: subtotal + fee + walkup,
+           count: count, kinds: Object.keys(state.picked).length };
+}
+
+// 分類標題右邊「N 款・已揀 M」，剔選有變就更新（收起咗都知入面揀咗幾多）
+function paintCourseHeads(){
+  document.querySelectorAll("[data-course]").forEach(function(head){
+    const sec = head.closest(".course");
+    const total = sec.querySelectorAll(".dish").length;
+    const picked = sec.querySelectorAll(".dish.on").length;
+    head.querySelector(".n").textContent = total + " 款" + (picked ? "・已揀 " + picked : "");
+  });
 }
 
 function updateBar(){
+  paintCourseHeads();
   const t = totals();
   $("#pickedN").textContent = t.kinds;
   $("#barCnt").textContent = t.kinds === 0 ? "未揀食物" : "已揀 " + t.kinds + " 款 · 共 " + t.count + " 份";
   $("#barAmt").textContent = money(t.total);
+  $("#cartN").textContent = t.kinds;
+  $("#cartN").hidden = t.kinds === 0;
+  if($("#cart").open) renderCart();
 
   let b = "";
   if(t.subtotal > 0){
-    b = "小計 <span>" + money(t.subtotal) + "</span>";
-    if(t.subtotal < CONFIG.minOrder){
+    b = "小計 <span>" + money(t.subtotal) + "</span>（9折已慳 <span>" + money(t.saved) + "</span>）";
+    if(CONFIG.minOrder > 0 && t.subtotal < CONFIG.minOrder){
       b += "<br>距最低消費仲差 <span>" + money(CONFIG.minOrder - t.subtotal) + "</span>";
     }else if(t.fee > 0){
       b += "<br>運費 <span>" + money(t.fee) + "</span>，再加 <span>" +
            money(CONFIG.freeDeliveryAt - t.subtotal) + "</span> 免運";
     }else{
-      b += "<br>免運費";
+      b += '<br><span class="free">滿 $1,500 免運費</span>';
     }
+    if(t.walkup > 0) b += "，送上寫字樓 <span>+" + money(t.walkup) + "</span>";
   }
   $("#barBreak").innerHTML = b;
-  checkServes();
-}
-
-function checkServes(){
-  const t = totals();
-  const guests = Number($("#fGuests").value);
-  const box = $("#servesWarn");
-  if(!guests || t.servings === 0){ box.hidden = true; return; }
-  if(t.servings < guests){
-    box.hidden = false;
-    box.innerHTML = "以 <b>" + guests + " 位</b>計，而家嘅份量大約夠 <b>" + t.servings +
-      " 位</b>。落單冇問題，不過建議加多一兩款。";
-  }else{
-    box.hidden = true;
-  }
 }
 
 /* ============================================================
-   9. 驗證
+   12. 已揀食物（購物車）— 招牌右上角個掣
+   ============================================================ */
+function renderCart(){
+  const ids = Object.keys(state.picked);
+  const list = $("#cartList");
+  if(!ids.length){
+    list.innerHTML = '<div class="cart-empty">仲未揀食物<br><span class="muted">喺餐單剔選想要嘅菜式</span></div>';
+    $("#cartTot").innerHTML = "";
+    $("#cartGo").disabled = true;
+    return;
+  }
+  $("#cartGo").disabled = false;
+  list.innerHTML = ids.map(function(id){
+    const m = byId(id);
+    const raw = state.picked[id];
+    const err = qtyError(raw, m);
+    return '<div class="c-row" data-crow="' + id + '">' +
+      '<div><div class="c-name">' + esc(m.name) + '</div>' +
+      '<div class="c-meta">' + esc(CAT[m.cat].label) + '・' + money(m.price) + ' ' + esc(perLabel(m)) + '</div></div>' +
+      '<div class="c-ctl">' +
+        '<div class="qty' + (err ? " bad" : "") + '">' +
+          '<button type="button" data-cstep="-1" data-cid="' + id + '" aria-label="減少"' + (raw > 1 ? "" : " disabled") + '>−</button>' +
+          '<input type="number" data-cqty="' + id + '" value="' + esc(raw) + '" min="1" max="' + CONFIG.maxQty + '" inputmode="numeric" aria-label="數量（' + esc(unitName(m)) + '）">' +
+          '<button type="button" data-cstep="1" data-cid="' + id + '" aria-label="增加"' + (raw < CONFIG.maxQty ? "" : " disabled") + '>+</button>' +
+        '</div>' +
+        '<button type="button" class="c-del" data-cdel="' + id + '" aria-label="移除">×</button>' +
+      '</div>' +
+      '<div class="c-line' + (err ? " err" : "") + '">' + (err ? esc(err) : esc(qtyLabel(m, raw)) + " × " + money(m.price) + " = " + money(raw * m.price)) + '</div>' +
+    '</div>';
+  }).join("");
+
+  const t = totals();
+  let h = '<div class="r"><span>小計（已計 9 折，慳咗 ' + money(t.saved) + '）</span><span>' + money(t.subtotal) + '</span></div>';
+  h += '<div class="r"><span>運費</span><span>' + (t.fee === 0 ? "免費" : money(t.fee)) + '</span></div>';
+  if(t.fee > 0) h += '<div class="muted">再加 ' + money(CONFIG.freeDeliveryAt - t.subtotal) + ' 即免運費</div>';
+  if(t.walkup > 0) h += '<div class="r"><span>送上寫字樓</span><span>+' + money(t.walkup) + '</span></div>';
+  h += '<div class="r grand"><span>總計</span><span>' + money(t.total) + '</span></div>';
+  $("#cartTot").innerHTML = h;
+}
+
+function setPicked(id, v){
+  if(v === null) delete state.picked[id]; else state.picked[id] = v;
+  paintRow(id);
+  updateBar();
+  revalidate();
+}
+
+$("#cartBtn").addEventListener("click", function(){ renderCart(); $("#cart").showModal(); });
+$("#cart").addEventListener("click", function(e){
+  if(e.target === e.currentTarget){ e.currentTarget.close(); return; }
+  const del = e.target.closest("[data-cdel]");
+  if(del){ setPicked(del.dataset.cdel, null); return; }
+  const step = e.target.closest("[data-cstep]");
+  if(step){
+    const id = step.dataset.cid;
+    const cur = Number(state.picked[id]) || 0;
+    setPicked(id, Math.min(CONFIG.maxQty, Math.max(1, cur + Number(step.dataset.cstep))));
+  }
+});
+$("#cart").addEventListener("input", function(e){
+  const q = e.target.closest("[data-cqty]");
+  if(!q) return;
+  const id = q.dataset.cqty;
+  const v = q.value.trim(), raw = v === "" ? "" : Number(v);
+  // 打字期間唔重畫成個 list，免得 input 失焦
+  state.picked[id] = raw;
+  paintRow(id);
+  const t = totals();
+  $("#cartN").textContent = t.kinds;
+  $("#barCnt").textContent = "已揀 " + t.kinds + " 款 · 共 " + t.count + " 份";
+  $("#barAmt").textContent = money(t.total);
+  const row = q.closest(".c-row"), line = row.querySelector(".c-line"), m = byId(id), err = qtyError(state.picked[id], m);
+  line.classList.toggle("err", !!err);
+  row.querySelector(".qty").classList.toggle("bad", !!err);
+  line.textContent = err ? err : qtyLabel(m, raw) + " × " + money(m.price) + " = " + money(raw * m.price);
+  revalidate();
+});
+$("#cart").addEventListener("change", function(e){
+  if(e.target.closest("[data-cqty]")) renderCart();   // 打完字先整齊重畫
+});
+$("#cartGo").addEventListener("click", function(){
+  $("#cart").close();
+  goDelivery();
+});
+
+/* ============================================================
+   13. 步驟切換：1 揀食物 → 2 送貨資料 → 3 確認頁
+   ============================================================ */
+function showStep(n){
+  state.step = n;
+  document.body.dataset.view = n;          // CSS 用嚟收起唔關事嘅招牌掣（唔用 data-step，避免撞到數量掣）
+  $("#orderView").hidden = n !== 1;
+  $("#deliveryView").hidden = n !== 2;
+  $("#doneView").hidden = n !== 3;
+  $("#orderbar").hidden = n === 3;
+  $("#barBack").hidden = n !== 2;
+  $("#submitBtn").textContent = n === 1 ? "下一步" : "落單";
+  // 錯誤總覽跟住當前步驟走
+  (n === 1 ? $("#errSlot1") : $("#errSlot2")).appendChild($("#errBox"));
+  if(n === 2 && ADDR.map) setTimeout(function(){ ADDR.map.invalidateSize(); }, 60);
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+// 由餐單去送貨資料：先檢查食物部分
+function goDelivery(){
+  if(state.step === 2) return;
+  state.foodTried = true;
+  if(!validate(true, true)) return;
+  showStep(2);
+}
+
+// 改動之後即時重新檢查（只喺用戶試過提交先會顯示錯誤）
+function revalidate(){
+  if(state.submitted) validate(false);
+  else if(state.foodTried) validate(false, true);
+}
+
+$("#barBack").addEventListener("click", function(){ showStep(1); });
+$("#backToMenu").addEventListener("click", function(){ showStep(1); });
+$("#reviewCart").addEventListener("click", function(){ renderCart(); $("#cart").showModal(); });
+
+/* ============================================================
+   14. 驗證
    ============================================================ */
 function setFieldError(name, msg){
   const f = document.querySelector('.field[data-f="' + name + '"]');
@@ -431,36 +697,34 @@ function hkPhoneOk(v){
   return /^[23569]\d{7}$/.test(d);
 }
 
-function minDateStr(){
-  const d = new Date();
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate() + CONFIG.leadDays);
-  return d.toISOString().slice(0,10);
-}
-
-function validate(scroll){
+function validate(scroll, foodOnly){
   const problems = []; // {msg, focus}
   const t = totals();
+  const date = $("#fDate").value;
+  const rush = isRushDate(date);
 
   // --- 食物 ---
   if(t.kinds === 0){
     problems.push({ msg: "請至少揀一款食物", focus: "#menu" });
   }
   Object.keys(state.picked).forEach(function(id){
-    const err = qtyError(state.picked[id]);
+    const m = byId(id);
+    const err = qtyError(state.picked[id], m);
     if(err){
-      const m = MENU.find(function(x){ return x.id === id; });
       problems.push({ msg: m.name + "：" + err, focus: "#dish-" + id });
+    }else if(rush && !m.rush){
+      problems.push({ msg: m.name + "：急單唔做呢款，請改日期或者剔走", focus: "#dish-" + id });
     }
   });
-  if(t.kinds > 0 && t.subtotal > 0 && t.subtotal < CONFIG.minOrder){
+  if(t.kinds > 0 && CONFIG.minOrder > 0 && t.subtotal > 0 && t.subtotal < CONFIG.minOrder){
     problems.push({
       msg: "未夠最低消費 " + money(CONFIG.minOrder) + "，仲差 " + money(CONFIG.minOrder - t.subtotal),
       focus: "#menu"
     });
   }
 
-  // --- 送貨資料 ---
+  // --- 送貨資料（第一步只檢查食物）---
+  if(!foodOnly){
   const name = $("#fName").value.trim();
   if(name.length < 2){
     setFieldError("name", "請填聯絡人姓名");
@@ -476,13 +740,15 @@ function validate(scroll){
     problems.push({ msg: "電話格式唔啱", focus: "#fPhone" });
   } else setFieldError("phone", "");
 
-  const date = $("#fDate").value;
   if(!date){
     setFieldError("date", "請揀送貨日期");
     problems.push({ msg: "未揀送貨日期", focus: "#fDate" });
   }else if(date < minDateStr()){
-    setFieldError("date", "最少要 " + CONFIG.leadDays + " 日前落單，最早係 " + minDateStr());
+    setFieldError("date", "最少要 " + CONFIG.leadWorkingDays + " 個工作天前落單，最早係 " + leadDateStr());
     problems.push({ msg: "送貨日期太早", focus: "#fDate" });
+  }else if(!isWorkingDay(new Date(date + "T00:00:00"))){
+    setFieldError("date", "星期六、日及公眾假期唔送貨");
+    problems.push({ msg: "送貨日期唔係工作天", focus: "#fDate" });
   } else setFieldError("date", "");
 
   if(!$("#fTime").value){
@@ -490,19 +756,14 @@ function validate(scroll){
     problems.push({ msg: "未揀送貨時間", focus: "#fTime" });
   } else setFieldError("time", "");
 
-  const guests = $("#fGuests").value.trim();
-  const gn = Number(guests);
-  if(!guests){
-    setFieldError("guests", "請填人數");
-    problems.push({ msg: "未填出席人數", focus: "#fGuests" });
-  }else if(!Number.isInteger(gn) || gn < 1 || gn > 300){
-    setFieldError("guests", "人數要係 1 至 300");
-    problems.push({ msg: "人數唔啱", focus: "#fGuests" });
-  } else setFieldError("guests", "");
+  if(!$("#fRegion").value){
+    setFieldError("region", "請揀區域");
+    problems.push({ msg: "未揀區域", focus: "#fRegion" });
+  } else setFieldError("region", "");
 
   if(!$("#fDistrict").value){
-    setFieldError("district", "請揀地區");
-    problems.push({ msg: "未揀地區", focus: "#fDistrict" });
+    setFieldError("district", $("#fRegion").value ? "請揀地區" : "先揀區域再揀地區");
+    problems.push({ msg: "未揀地區", focus: $("#fRegion").value ? "#fDistrict" : "#fRegion" });
   } else setFieldError("district", "");
 
   const addrText = $("#fAddr").value.trim();
@@ -523,10 +784,16 @@ function validate(scroll){
   }
 
   const unit = $("#fUnit").value.trim();
-  if(!unit){
-    setFieldError("unit", "請填樓層同單位");
+  if($("#fWalkup").checked && !unit){
+    setFieldError("unit", "送上寫字樓要填樓層同單位");
     problems.push({ msg: "未填樓層／單位", focus: "#fUnit" });
   } else setFieldError("unit", "");
+
+  if(!$("#fTerms").checked){
+    setFieldError("terms", "請先閱讀並同意落單須知");
+    problems.push({ msg: "未同意落單須知", focus: "#fTerms" });
+  } else setFieldError("terms", "");
+  }
 
   // --- 顯示 ---
   const box = $("#errBox"), list = $("#errList");
@@ -556,120 +823,164 @@ function validate(scroll){
 function jumpTo(sel){
   const el = document.querySelector(sel);
   if(!el) return;
+  const fold = el.closest("details");
+  if(fold) fold.open = true;
+  if(el.id === "fUnit") $("#unitField").hidden = false;
+  if(state.step !== 3){
+    const inMenu = !!el.closest("#orderView");
+    if(inMenu && state.step !== 1) showStep(1);
+    if(!inMenu && state.step !== 2) showStep(2);
+  }
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   if(el.matches("input,select,textarea")) setTimeout(function(){ el.focus({ preventScroll: true }); }, 300);
 }
 
 // 一填好就即時清走已經改好嘅錯誤
-["#fName","#fPhone","#fDate","#fTime","#fGuests","#fDistrict","#fAddr","#fUnit"].forEach(function(sel){
-  document.querySelector(sel).addEventListener("input", function(){ if(state.submitted) validate(false); });
-  document.querySelector(sel).addEventListener("change", function(){ if(state.submitted) validate(false); });
+["#fName","#fPhone","#fDate","#fTime","#fRegion","#fDistrict","#fAddr","#fUnit","#fTerms"].forEach(function(sel){
+  document.querySelector(sel).addEventListener("input", function(){ revalidate(); });
+  document.querySelector(sel).addEventListener("change", function(){ revalidate(); });
 });
-$("#fGuests").addEventListener("input", checkServes);
+// 改日期 → 急單篩選可能改變
+$("#fDate").addEventListener("change", renderMenu);
+// 送上寫字樓 → 總數即時變
+$("#fWalkup").addEventListener("change", function(e){
+  $("#unitField").hidden = !e.target.checked;
+  if(e.target.checked) $("#fUnit").focus();
+  else { $("#fUnit").value = ""; setFieldError("unit", ""); }
+  updateBar();
+  revalidate();
+});
 
 /* ============================================================
-   10. 落單 → 確認頁
+   15. 落單 → 確認頁
    ============================================================ */
 function orderNo(){
   const d = new Date();
   const p = function(n){ return String(n).padStart(2, "0"); };
   const rnd = String(Math.floor(1000 + Math.random() * 9000));
-  return "WM" + String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) + "-" + rnd;
+  return "NAN" + String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) + "-" + rnd;
 }
 
 function orderLines(){
   return Object.keys(state.picked).map(function(id){
-    const m = MENU.find(function(x){ return x.id === id; });
+    const m = byId(id);
     const n = Number(state.picked[id]);
-    return { name: m.name, qty: n, amount: m.price * n };
+    // 標籤跟住訂單走：敏感（含堅果）同辣度一定要落到 WhatsApp
+    const tags = (m.signature ? ["皇牌"] : []).concat(m.tags);
+    return { id: id, name: m.name, cat: CAT[m.cat].label, portion: portionText(m), qty: n,
+             qtyText: qtyLabel(m, n), unit: m.price, amount: m.price * n,
+             listUnit: m.list, listAmount: m.list * n, tags: tags };
   });
+}
+
+// WhatsApp 訊息入面要提廚房嘅標籤（其餘只係介紹）
+const KITCHEN_TAGS = ["含堅果", "微辣", "素食/可走葷"];
+
+// 區域 地區 + 地址；地址查詢返嚟本身已有區域地區就唔重複
+function fullAddr(o){
+  const prefix = [o.region, o.district].filter(Boolean).join(" ");
+  return o.addr.indexOf(o.district) !== -1 || o.addr.indexOf(o.region) === 0 ? o.addr : (prefix + " " + o.addr).trim();
 }
 
 function buildMessage(o){
   const L = [];
-  L.push("【" + CONFIG.shopName + " 落單】");
+  L.push("【" + CONFIG.shopName + " " + CONFIG.shopNameEn + " 到會落單】");
   L.push("單號：" + o.no);
   L.push("");
-  L.push("── 食物 ──");
-  o.lines.forEach(function(l){ L.push("• " + l.name + " × " + l.qty + "　" + money(l.amount)); });
+  // 每款三行：名 / 數量 × 單價 = 金額 / 廚房要知嘅標籤（敏感、辣、素）
+  L.push("── 食物（已計 " + CONFIG.discountLabel + "）──");
+  o.lines.forEach(function(l, i){
+    const kitchen = l.tags.filter(function(t){ return KITCHEN_TAGS.indexOf(t) !== -1; });
+    L.push((i + 1) + ". *" + l.name + "*");
+    L.push("    " + l.qtyText + " × " + money(l.unit) + " = ~" + money(l.listAmount) + "~ " + money(l.amount));
+    if(kitchen.length) L.push("    ⚠ " + kitchen.join("・"));
+  });
   L.push("");
-  L.push("小計：" + money(o.subtotal));
-  L.push("運費：" + (o.fee === 0 ? "免費" : money(o.fee)));
+  L.push("原價：~" + money(o.listTotal) + "~");
+  L.push("小計（" + CONFIG.discountLabel + "，慳 " + money(o.saved) + "）：" + money(o.subtotal));
+  L.push("運費：" + (o.fee === 0 ? "免費（滿 $1,500）" : money(o.fee)));
+  if(o.walkup > 0) L.push("送上寫字樓：+" + money(o.walkup));
   L.push("總計：" + money(o.total));
   L.push("");
   L.push("── 送貨 ──");
-  L.push("姓名：" + o.name);
+  L.push("聯絡人：" + o.name);
   L.push("電話：" + o.phone);
-  L.push("日期：" + o.date + " " + o.time);
-  L.push("人數：" + o.guests + " 位");
-  L.push("地址：" + o.addr);
-  L.push("樓層／單位：" + o.unit);
+  if(o.company) L.push("公司：" + o.company);
+  L.push("日期：" + o.date + " " + o.time + (o.rush ? "（急單）" : ""));
+  L.push("地址：" + fullAddr(o));
+  L.push(o.walkup > 0 ? "送上寫字樓：" + o.unit : "交收：地面交收");
   if(o.mapUrl) L.push("地圖：" + o.mapUrl);
   if(o.remark) L.push("備註：" + o.remark);
   L.push("");
-  L.push("請確認貨期同付款方法，唔該。");
+  L.push("已同意：訂單確認後 " + CONFIG.paymentWorkingDays + " 個工作天內付款；確認後不可更改或取消；八號風球／黑雨當日取消可於 2 個月內改期。");
+  L.push("請確認訂單同付款方法，唔該。");
   return L.join("\n");
 }
 
 let lastMessage = "";
 
 $("#submitBtn").addEventListener("click", function(){
+  if(state.step === 1){ goDelivery(); return; }
   state.submitted = true;
   if(!validate(true)) return;
 
   const t = totals();
+  const payBy = addWorkingDays(new Date(), CONFIG.paymentWorkingDays);
   const o = {
     no: orderNo(),
     lines: orderLines(),
-    subtotal: t.subtotal, fee: t.fee, total: t.total,
+    subtotal: t.subtotal, listTotal: t.listTotal, saved: t.saved, fee: t.fee, walkup: t.walkup, total: t.total,
     name: $("#fName").value.trim(),
     phone: $("#fPhone").value.trim(),
+    company: $("#fCompany").value.trim(),
     date: $("#fDate").value,
     time: $("#fTime").value,
-    guests: $("#fGuests").value.trim(),
+    rush: isRushDate($("#fDate").value),
+    region: $("#fRegion").value,
     district: $("#fDistrict").value,
     addr: (ADDR.picked ? ADDR.picked.zh : $("#fAddr").value.trim().replace(/\s+/g, " ")),
     unit: $("#fUnit").value.trim(),
     mapUrl: mapLink(ADDR.picked),
-    remark: $("#fRemark").value.trim()
+    remark: $("#fRemark").value.trim(),
+    payBy: ymd(payBy)
   };
 
   $("#oNo").textContent = o.no;
   $("#oItems").innerHTML = o.lines.map(function(l){
-    return '<div class="srow"><span class="q">' + l.qty + "×</span><span>" + l.name +
-           '</span><span class="l"></span><span class="v">' + money(l.amount) + "</span></div>";
+    return '<div class="srow"><span class="q">' + l.qty + "×</span><span>" + esc(l.name) +
+           '</span><span class="l"></span><span class="v"><s>' + money(l.listAmount) + "</s> " + money(l.amount) + "</span>" +
+           '<span class="sub">' + esc(l.qtyText) + "・" + esc(l.portion) +
+           (l.tags.length ? "　" + l.tags.map(function(x){ return "[" + esc(x) + "]"; }).join(" ") : "") +
+           "</span></div>";
   }).join("");
+  $("#oList").textContent = money(o.listTotal);
+  $("#oSaved").textContent = "－" + money(o.saved);
   $("#oSub").textContent = money(o.subtotal);
-  $("#oFeeLbl").textContent = o.fee === 0 ? "運費（已免）" : "運費";
+  $("#oFeeLbl").textContent = o.fee === 0 ? "運費（滿 $1,500 已免）" : "運費";
   $("#oFee").textContent = o.fee === 0 ? "$0" : money(o.fee);
+  $("#oWalkRow").hidden = o.walkup === 0;
+  $("#oWalk").textContent = "+" + money(o.walkup);
   $("#oTotal").textContent = money(o.total);
+  $("#oPayBy").textContent = o.payBy;
   $("#oInfo").innerHTML =
-    info("收件人", o.name + "　" + o.phone) +
-    info("時間", o.date + "　" + o.time) +
-    info("地址", o.addr + "　" + o.unit +
+    info("聯絡人", esc(o.name) + "　" + esc(o.phone) + (o.company ? "　" + esc(o.company) : "")) +
+    info("時間", o.date + "　" + o.time + (o.rush ? "　<b>急單</b>" : "")) +
+    info("地址", esc(fullAddr(o)) +
       (o.mapUrl ? ' <a href="' + o.mapUrl + '" target="_blank" rel="noopener">地圖 ↗</a>' : "")) +
-    info("人數", o.guests + " 位") +
-    (o.remark ? info("備註", o.remark) : "");
+    info("交收", o.walkup > 0 ? "送上寫字樓 " + esc(o.unit) + "（+" + money(o.walkup) + "）" : "地面交收") +
+    (o.remark ? info("備註", esc(o.remark)) : "");
 
   lastMessage = buildMessage(o);
   $("#waBtn").href = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(lastMessage);
 
-  $("#orderView").hidden = true;
-  $("#orderbar").hidden = true;
-  $("#doneView").hidden = false;
-  window.scrollTo({ top: 0, behavior: "auto" });
+  showStep(3);
 });
 
 function info(k, v){
   return '<div class="info-line"><b>' + k + "</b><span>" + v + "</span></div>";
 }
 
-$("#backBtn").addEventListener("click", function(){
-  $("#doneView").hidden = true;
-  $("#orderView").hidden = false;
-  $("#orderbar").hidden = false;
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
-});
+$("#backBtn").addEventListener("click", function(){ showStep(2); });
 
 $("#copyBtn").addEventListener("click", function(){
   const btn = $("#copyBtn");
@@ -690,7 +1001,7 @@ $("#copyBtn").addEventListener("click", function(){
 });
 
 /* ============================================================
-   10b. 地址搜尋 + 地圖
+   16. 地址搜尋 + 地圖
    用政府「地址搜尋服務」(ALS)：免費、免 API key、中英文齊、附座標。
    想轉用 Google Places？淨係要改 lookupAddress() 一個 function。
    ============================================================ */
@@ -700,7 +1011,36 @@ const ADDR = {
   available: true,     // 搜尋服務通唔通；唔通就自動退回純手打
   map: null, marker: null
 };
-const REGION_ZH = { HK: "香港島", KLN: "九龍", NT: "新界" };
+const REGION_ZH = { HK: "香港島", KLN: "九龍", NT: "新界", "香港": "香港島", "九龍": "九龍", "新界": "新界" };
+
+/* 區域 → 地區 兩層下拉（DISTRICTS 喺 data/menu.js） */
+function fillSelect(sel, values, placeholder){
+  sel.innerHTML = "";
+  const op = document.createElement("option");
+  op.value = ""; op.textContent = placeholder;
+  sel.appendChild(op);
+  values.forEach(function(v){
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  });
+}
+function regionOfDistrict(d){
+  if(!d) return "";
+  return Object.keys(DISTRICTS).find(function(r){ return DISTRICTS[r].indexOf(d) !== -1; }) || "";
+}
+// 設定區域（同埋可選嘅地區）；只會填，唔會清走用戶已揀嘅嘢
+function setRegion(region, district){
+  const rSel = $("#fRegion"), dSel = $("#fDistrict");
+  if(region && DISTRICTS[region] && rSel.value !== region){
+    rSel.value = region;
+  }
+  const list = DISTRICTS[rSel.value] || [];
+  const keep = district && list.indexOf(district) !== -1 ? district : (list.indexOf(dSel.value) !== -1 ? dSel.value : "");
+  fillSelect(dSel, list, list.length ? "請揀" : "先揀區域");
+  dSel.disabled = !list.length;
+  dSel.value = keep;
+}
 
 /* 將 ALS 一筆記錄砌成一行可讀地址 */
 function alsFormat(rec){
@@ -740,7 +1080,8 @@ function alsFormat(rec){
     en: enLine,
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
-    region: REGION_ZH[e.Region] || c.Region || ""
+    region: REGION_ZH[e.Region] || REGION_ZH[c.Region] || "",
+    district: (c.ChiDistrict && c.ChiDistrict.DcDistrict) || ""
   };
 }
 
@@ -754,8 +1095,9 @@ function mapLink(a){
 function lookupAddress(q){
   if(ADDR.ctrl) ADDR.ctrl.abort();
   ADDR.ctrl = new AbortController();
-  const url = "https://www.als.gov.hk/lookup?q=" + encodeURIComponent(q) + "&n=8";
-  return fetch(url, { headers: { Accept: "application/json" }, signal: ADDR.ctrl.signal })
+  // Accept-Language: zh-Hant 先會有中文地址（連地區）；lang= 只係用嚟避開瀏覽器用同一 URL 嘅英文 cache
+  const url = "https://www.als.gov.hk/lookup?q=" + encodeURIComponent(q) + "&n=8&lang=zh-Hant";
+  return fetch(url, { headers: { Accept: "application/json", "Accept-Language": "zh-Hant" }, signal: ADDR.ctrl.signal })
     .then(function(res){
       if(!res.ok) throw new Error("ALS " + res.status);
       return res.json();
@@ -813,13 +1155,10 @@ function selectAddr(i){
     (link ? '<a href="' + link + '" target="_blank" rel="noopener">喺 Google 地圖睇 ↗</a>' : "");
   $("#pickedAddr").hidden = false;
 
-  // 自動填地區，但用戶仍然改得
-  if(a.region && !$("#fDistrict").value){
-    const opt = Array.prototype.find.call($("#fDistrict").options, function(o){ return o.value === a.region; });
-    if(opt) $("#fDistrict").value = a.region;
-  }
+  // 揀咗地址就自動填區域＋地區，用戶仍然改得（離島區喺 ALS 屬新界，所以以地區反推區域為準）
+  setRegion(regionOfDistrict(a.district) || a.region, a.district);
   showMap(a);
-  if(state.submitted) validate(false);
+  revalidate();
 }
 
 function clearPicked(){
@@ -914,26 +1253,33 @@ function initAddress(){
   input.addEventListener("blur", function(){ setTimeout(function(){ box.hidden = true; }, 120); });
 }
 
+
 /* ============================================================
-   11. 開機
+   17. 開機
    ============================================================ */
 (function init(){
   // 送貨時間選項
   const sel = $("#fTime");
-  for(let h = 11; h <= 20; h++){
-    ["00","30"].forEach(function(mm){
-      const v = String(h).padStart(2,"0") + ":" + mm;
-      const op = document.createElement("option");
-      op.value = v; op.textContent = v;
-      sel.appendChild(op);
-    });
+  const toMin = function(s){ const a = s.split(":"); return Number(a[0]) * 60 + Number(a[1]); };
+  for(let t = toMin(CONFIG.deliveryFrom); t <= toMin(CONFIG.deliveryTo); t += CONFIG.deliveryStepMin){
+    const v = String(Math.floor(t / 60)).padStart(2,"0") + ":" + String(t % 60).padStart(2,"0");
+    const op = document.createElement("option");
+    op.value = v; op.textContent = v;
+    sel.appendChild(op);
   }
-  // 日期下限
+  // 區域 → 地區
+  fillSelect($("#fRegion"), Object.keys(DISTRICTS), "請揀");
+  $("#fRegion").addEventListener("change", function(){ setRegion($("#fRegion").value, ""); });
+
+  // 日期下限：3 個工作天後（allowRushOrders 時可以早啲，但只見到急單款）
   const dEl = $("#fDate");
   dEl.min = minDateStr();
-  dEl.value = minDateStr();
+  dEl.value = leadDateStr();
+  $("#dateHint").textContent = "最早 " + leadDateStr().slice(5).replace("-", "/") + "，星期一至五";
 
+  initHeader();
   buildFilters();
   initAddress();
   renderMenu();
+  showStep(1);
 })();
