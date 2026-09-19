@@ -29,8 +29,8 @@ const CONFIG = {
    2. 分類 — 餐單上嘅排列次序
    ============================================================ */
 const CATEGORIES = [
-  {key:"dessert", label:"糖水", note:"每杯 350ml"},
-  {key:"snack",   label:"小食", note:"價錢為每「份」總價・已列明份量", foot:"建議60分鐘內食用"},
+  {key:"dessert", label:"糖水", note:"每碗 350ml"},
+  {key:"snack",   label:"小食", note:"價錢為每「份」總價・已列明份量"},   // 「建議60分鐘內食用」而家係每款自己嘅標籤
   {key:"drink",   label:"飲品", note:"每杯 350ml"}
 ];
 
@@ -40,62 +40,70 @@ const TAG_STYLE = {
   "凍食佳":"", "免餐具":"", "低糖":"", "建議60分鐘內食用":""
 };
 
-// 飲食需要篩選：include = 只睇有呢個標籤嘅；exclude = 隱藏有呢個標籤嘅
+// 標籤篩選：include = 只睇有呢個標籤嘅；exclude = 隱藏有呢個標籤嘅
+// 飲食需要（xlsx：素食/可走葷・微辣・含堅果 欄）
 const DIETS = [
   {key:"素食/可走葷", label:"只睇素食／可走葷", mode:"include"},
   {key:"微辣",        label:"免辣",             mode:"exclude"},
   {key:"含堅果",      label:"免堅果",           mode:"exclude"}
 ];
+// 食用需要（xlsx：凍食佳・免餐具・建議60分鐘內食用 欄）
+const SERVING = [
+  {key:"凍食佳",           label:"唔使加熱",         mode:"include"},
+  {key:"免餐具",           label:"免餐具・單手食得", mode:"include"},
+  {key:"建議60分鐘內食用", label:"可以放耐啲",       mode:"exclude"}
+];
+// 系列（xlsx：子分類 欄）唔使喺度列，由餐單資料自動抽出嚟
 
 /* ============================================================
-   3. 餐單資料 — 來源：NAN 辦公室到會MENU $$.xlsx
-      list = 原價，price = 9折價（落單用 price）
-      加 img 屬性就可以換真相，例：img:"images/yeung-chi.jpg"
+   3. 餐單資料 — 由《NAN 辦公室到會MENU.xlsx》生成，唔好手改
+      改咗 xlsx 之後行：  python3 tools/build-menu.py
+      （會改寫下面 MENU:BEGIN … MENU:END 之間，其他部分唔郁）
 
-      ⚠ 上線前要同廚房確認：
-        - 三款 一口／涼拌 嘅價錢，海報同 Excel 唔同（用咗 Excel）
-        - 芥末蝦球 海報係皇牌，Excel 唔係（暫時唔係）
-        - 微辣／素食／含堅果／凍食佳 標籤只有海報有，下面只填咗由名可以肯定嘅
+      每款：id 項目編號 / cat 大類 / sub 子分類 / name / portion 份量
+            perQty 每份數量 + unit 單位（1 份 = 5 件；350 ml 就當 1 杯）
+            minQty 起訂份數 / list 原價 / price 會員價（落單用）
+            signature 皇牌 / active 上架 / rush 急單（xlsx 冇呢欄就 false）
+            tags 由 凍食佳・免餐具・建議60分鐘內食用・含堅果・微辣・素食/可走葷 欄嚟
+            img 圖片檔名（images/ 入面）；冇相就有 hue 畫佔位圖
    ============================================================ */
-const MENU = [
-  /* ---------- 糖水 · 350ml ---------- */
-  {id:"D01", cat:"dessert", name:"楊枝甘露",         list:43, price:38, signature:true,  hue:38,  tags:["凍食佳"], rush:false},
-  {id:"D02", cat:"dessert", name:"芒果西米小丸子",   list:38, price:34, signature:false, hue:42,  tags:["凍食佳"], rush:false},
-  {id:"D03", cat:"dessert", name:"芒果西米三色芋圓", list:38, price:34, signature:false, hue:44,  tags:["凍食佳"], rush:false},
-  {id:"D04", cat:"dessert", name:"椰汁斑斕大滿貫",   list:43, price:38, signature:false, hue:95,  tags:[],         rush:false},
-  {id:"D05", cat:"dessert", name:"椰汁桃膠馬蹄爆爆珠", list:38, price:34, signature:false, hue:60, tags:[],        rush:false},
-  {id:"D06", cat:"dessert", name:"椰汁桃膠三色芋圓", list:38, price:34, signature:false, hue:300, tags:[],         rush:false},
-  {id:"D07", cat:"dessert", name:"真打開心果糊",     list:45, price:40, signature:false, hue:80,  tags:["含堅果"], rush:false},
-  {id:"D08", cat:"dessert", name:"真打芝麻糊",       list:33, price:30, signature:false, hue:0,   tags:[],         rush:false},
-  {id:"D09", cat:"dessert", name:"冬瓜雪梨海底椰",   list:33, price:30, signature:true,  hue:110, tags:[],         rush:false},
-
-  /* ---------- 小食 · 價錢為每份總價 ---------- */
-  {id:"S01", cat:"snack", name:"瑞士雞翼",           portion:"1份（10隻）", list:88,  price:78,  signature:false, hue:20, tags:[], rush:false},
-  {id:"S02", cat:"snack", name:"爆蒜雞中翼",         portion:"1份（10隻）", list:98,  price:88,  signature:false, hue:24, tags:[], rush:false},
-  {id:"S03", cat:"snack", name:"爆蒜雞翼尖",         portion:"1份（20隻）", list:52,  price:48,  signature:false, hue:26, tags:[], rush:false},
-  {id:"S04", cat:"snack", name:"咖哩三重奏",         portion:"1份（麵筋10件 / 魚蛋20粒 / 蘿蔔10件）", list:120, price:108, signature:true, hue:40, tags:["微辣"], rush:false},
-  {id:"S05", cat:"snack", name:"麻辣鮮花椒乾撈鮑魚", portion:"1份（10件）", list:360, price:320, signature:false, hue:8,  tags:["微辣"], rush:false},
-  {id:"S06", cat:"snack", name:"一口乾坤咕嚕肉",     portion:"1人份（10粒）", list:138, price:120, signature:true, hue:14, tags:[], rush:false},
-  {id:"S07", cat:"snack", name:"芥末蝦球配炸饅頭底", portion:"1人份（5件起）", list:158, price:138, signature:false, hue:30, tags:[], rush:false},  // 皇牌？海報有、Excel 冇
-  {id:"S08", cat:"snack", name:"懷舊手工百花釀蟹鉗", portion:"1人份（5件起）", list:368, price:328, signature:true, hue:18, tags:[], rush:false},
-  {id:"S09", cat:"snack", name:"炸豆卜豬肉丸",       portion:"15粒",          list:88,  price:80,  signature:false, hue:36, tags:[], rush:false},
-  {id:"S10", cat:"snack", name:"炸腐皮韭菜餃",       portion:"15粒",          list:98,  price:88,  signature:false, hue:48, tags:[], rush:false},
-  {id:"S11", cat:"snack", name:"一口柱侯牛肋條撈陳村粉", portion:"1份（5杯）", list:98, price:88,  signature:true,  hue:16, tags:["免餐具"], rush:false},
-  {id:"S12", cat:"snack", name:"一口鹽水鴨胸撈陳村粉",   portion:"1份（5杯）", list:98, price:88,  signature:false, hue:22, tags:["免餐具"], rush:false},
-  {id:"S13", cat:"snack", name:"一口麻辣皮蛋花甲米線",   portion:"1份（10杯）", list:248, price:220, signature:false, hue:6, tags:["微辣","免餐具"], rush:false},  // ⚠ 海報 120/108
-  {id:"S14", cat:"snack", name:"一口芝士肉醬焗意粉",     portion:"1份（10杯）", list:200, price:180, signature:false, hue:28, tags:["免餐具"], rush:false},       // ⚠ 海報 98/88
-  {id:"S15", cat:"snack", name:"涼拌麻醬低溫慢煮雞絲粉皮", portion:"1份（10杯）", list:248, price:220, signature:false, hue:52, tags:["凍食佳","免餐具"], rush:false}, // ⚠ 海報 120/108
-
-  /* ---------- 飲品 · 350ml ---------- */
-  {id:"B01", cat:"drink", name:"菊花馬蹄爽",         list:28, price:26, signature:false, hue:50,  tags:["低糖"], rush:false},
-  {id:"B02", cat:"drink", name:"竹蔗茅根檸檬水",     list:28, price:26, signature:false, hue:70,  tags:["低糖"], rush:false},
-  {id:"B03", cat:"drink", name:"雪梨白涼粉冬瓜茶",   list:32, price:28, signature:true,  hue:100, tags:[],       rush:false},
-  {id:"B04", cat:"drink", name:"椰汁西米斑斕凍",     list:34, price:30, signature:false, hue:90,  tags:[],       rush:false},
-  {id:"B05", cat:"drink", name:"楊枝甘露",           list:38, price:34, signature:false, hue:38,  tags:[],       rush:false},  // 同糖水版係兩個唔同 SKU
-  {id:"B06", cat:"drink", name:"紅豆芋泥椰汁",       list:38, price:34, signature:false, hue:320, tags:[],       rush:false},
-  {id:"B07", cat:"drink", name:"桃膠椰汁西米",       list:38, price:34, signature:false, hue:56,  tags:[],       rush:false},
-  {id:"B08", cat:"drink", name:"菠蘿脆皮椰汁",       list:38, price:34, signature:false, hue:46,  tags:[],       rush:false}
+/* MENU:BEGIN */
+const MENU_ALL = [
+  /* ---------- 糖水 ---------- */
+  {id:"DS01", cat:"dessert", sub:"芒果系列", name:"楊枝甘露", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:43, price:38, signature:true, active:true, rush:false, tags:["凍食佳"], img:"images/楊枝甘露.JPG"},
+  {id:"DS02", cat:"dessert", sub:"芒果系列", name:"芒果西米小丸子", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:184},
+  {id:"DS03", cat:"dessert", sub:"芒果系列", name:"芒果西米三色芋圓", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:89},
+  {id:"DS04", cat:"dessert", sub:"椰汁系列", name:"椰汁斑斕大滿貫", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:43, price:38, signature:false, active:true, rush:false, tags:["凍食佳"], hue:227},
+  {id:"DS05", cat:"dessert", sub:"椰汁系列", name:"椰汁桃膠馬蹄爆爆珠", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:22},
+  {id:"DS06", cat:"dessert", sub:"椰汁系列", name:"椰汁桃膠三色芋圓", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:["凍食佳"], hue:260},
+  {id:"DS07", cat:"dessert", sub:"真打系列/其他", name:"真打開心果糊", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:45, price:40, signature:false, active:true, rush:false, tags:["凍食佳","含堅果"], hue:8},
+  {id:"DS08", cat:"dessert", sub:"真打系列/其他", name:"真打芝麻糊", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:33, price:30, signature:false, active:true, rush:false, tags:["凍食佳"], hue:89},
+  {id:"DS09", cat:"dessert", sub:"真打系列/其他", name:"冬瓜雪梨海底椰", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:33, price:30, signature:true, active:true, rush:false, tags:["凍食佳"], hue:340},
+  /* ---------- 飲品 ---------- */
+  {id:"DR01", cat:"drink", sub:"低糖系列", name:"菊花馬蹄爽(低糖)", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:28, price:26, signature:false, active:true, rush:false, tags:[], img:"images/菊花馬蹄爽.JPG"},
+  {id:"DR02", cat:"drink", sub:"低糖系列", name:"竹蔗茅根檸檬水(低糖)", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:28, price:26, signature:false, active:true, rush:false, tags:[], img:"images/竹蔗茅根水.JPG"},
+  {id:"DR03", cat:"drink", sub:"涼茶系列", name:"雪梨白涼粉冬瓜茶", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:32, price:28, signature:true, active:true, rush:false, tags:[], img:"images/雪梨白涼粉冬瓜茶.JPG"},
+  {id:"DR04", cat:"drink", sub:"椰汁系列", name:"椰汁西米斑斕凍", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:34, price:30, signature:false, active:true, rush:false, tags:[], img:"images/椰汁斑蘭凍.JPG"},
+  {id:"DR05", cat:"drink", sub:"芒果系列", name:"楊枝甘露", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:[], img:"images/楊枝甘露.JPG"},
+  {id:"DR06", cat:"drink", sub:"椰汁系列", name:"紅豆芋泥椰汁", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:[], img:"images/紅豆芋泥椰汁.JPG"},
+  {id:"DR07", cat:"drink", sub:"椰汁系列", name:"桃膠椰汁西米", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:[], img:"images/桃膠椰汁西米.JPG"},
+  {id:"DR08", cat:"drink", sub:"椰汁系列", name:"菠蘿脆皮椰汁", portion:"350ml", perQty:350, unit:"ml", minQty:1, list:38, price:34, signature:false, active:true, rush:false, tags:[], hue:14},
+  /* ---------- 小食 ---------- */
+  {id:"SN01", cat:"snack", sub:"雞翼系列", name:"瑞士雞翼", portion:"1份(10隻)", perQty:10, unit:"隻", minQty:1, list:88, price:78, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], hue:207},
+  {id:"SN02", cat:"snack", sub:"雞翼系列", name:"爆蒜雞中翼", portion:"1份(10隻)", perQty:10, unit:"隻", minQty:1, list:98, price:88, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], hue:146},
+  {id:"SN03", cat:"snack", sub:"雞翼系列", name:"爆蒜雞翼尖", portion:"1份(20隻)", perQty:20, unit:"隻", minQty:1, list:52, price:48, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], hue:108},
+  {id:"SN04", cat:"snack", sub:"咖哩系列", name:"咖哩三重奏", portion:"1份 = 40件（麵筋10・魚蛋20・蘿蔔10）", perQty:40, unit:"件", minQty:1, list:120, price:108, signature:true, active:true, rush:false, tags:["微辣","素食/可走葷"], hue:217},
+  {id:"SN05", cat:"snack", sub:"海鮮系列", name:"麻辣鮮花椒乾撈鮑魚", portion:"1份(10隻)", perQty:10, unit:"隻", minQty:1, list:360, price:320, signature:false, active:true, rush:false, tags:["凍食佳","微辣"], img:"images/麻辣鮮花椒乾撈鮑魚.JPG"},
+  {id:"SN06", cat:"snack", sub:"炸物系列", name:"一口乾坤咕嚕肉", portion:"1人份(10粒)", perQty:10, unit:"粒", minQty:1, list:138, price:120, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], img:"images/一口乾坤咕嚕肉.JPG"},
+  {id:"SN07", cat:"snack", sub:"海鮮系列", name:"芥末蝦球配炸饅頭底", portion:"1人份(5件起)", perQty:5, unit:"件", minQty:1, list:158, price:138, signature:true, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], img:"images/芥末蝦球配炸饅頭底.JPG"},
+  {id:"SN08", cat:"snack", sub:"海鮮系列", name:"懷舊手工百花釀蟹鉗", portion:"1人份(5件起)", perQty:5, unit:"件", minQty:1, list:368, price:328, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], img:"images/懷舊手工百花釀蟹鉗.JPG"},
+  {id:"SN09", cat:"snack", sub:"炸物系列", name:"炸豆卜豬肉丸", portion:"1份(15粒)", perQty:15, unit:"粒", minQty:1, list:88, price:80, signature:false, active:true, rush:false, tags:["免餐具","建議60分鐘內食用"], hue:289},
+  {id:"SN10", cat:"snack", sub:"炸物系列", name:"炸腐皮韭菜餃", portion:"1份(15粒)", perQty:15, unit:"粒", minQty:1, list:98, price:88, signature:false, active:true, rush:false, tags:["免餐具","素食/可走葷"], hue:120},
+  {id:"SN11", cat:"snack", sub:"一口杯系列", name:"一口柱侯牛肋條撈陳村粉", portion:"1份(5杯)", perQty:5, unit:"杯", minQty:1, list:98, price:88, signature:true, active:true, rush:false, tags:["凍食佳"], hue:284},
+  {id:"SN12", cat:"snack", sub:"一口杯系列", name:"一口鹽水鴨胸撈陳村粉", portion:"1份(5杯)", perQty:5, unit:"杯", minQty:1, list:98, price:88, signature:false, active:true, rush:false, tags:["凍食佳"], hue:225},
+  {id:"SN13", cat:"snack", sub:"一口杯系列", name:"一口麻辣皮蛋花甲米線", portion:"1份(10杯)", perQty:10, unit:"杯", minQty:1, list:120, price:108, signature:false, active:true, rush:false, tags:["微辣"], img:"images/一口麻辣皮蛋花甲米線.JPG"},
+  {id:"SN14", cat:"snack", sub:"一口杯系列", name:"一口芝士肉醬焗意粉", portion:"1份(10杯)", perQty:10, unit:"杯", minQty:1, list:98, price:88, signature:false, active:true, rush:false, tags:["建議60分鐘內食用"], img:"images/一口芝士肉醬焗意粉.JPG"},
+  {id:"SN15", cat:"snack", sub:"一口杯系列", name:"涼拌麻醬低溫慢煮雞絲粉皮", portion:"1份(10杯)", perQty:10, unit:"杯", minQty:1, list:120, price:108, signature:false, active:true, rush:false, tags:["凍食佳"], img:"images/涼拌麻醬低溫慢煮雞絲粉皮.JPG"},
 ];
+/* MENU:END */
 
-/* 落單時揀嘅場合（唔係篩選） */
-const OCCASIONS = ["會議茶點", "午餐到會", "公司活動", "培訓聚會", "其他"];

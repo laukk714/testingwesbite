@@ -11,9 +11,11 @@ function placeholder(hue){
     'fill="hsl(' + hue + ' 22% 52%)">相片</text></svg>';
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
+// 只顯示「上架」嘅款（MENU_ALL 由 xlsx 生成，見 data/menu.js）
+const MENU = MENU_ALL.filter(function(m){ return m.active !== false; });
 MENU.forEach(function(m){
   if(!m.img) m.img = placeholder(m.hue);
-  if(!m.portion) m.portion = "1杯（350ml）";   // 糖水、飲品預設
+  if(!m.portion) m.portion = "350ml";          // 糖水、飲品預設
   if(!m.tags) m.tags = [];
 });
 
@@ -21,18 +23,46 @@ const CAT = {};
 CATEGORIES.forEach(function(c){ CAT[c.key] = c; });
 const byId = function(id){ return MENU.find(function(x){ return x.id === id; }); };
 
+/* 數量單位：
+   - 有「每份數量」而唔係 ml 嘅（小食）：畫面上用「件／隻／粒／杯」計，1 份 = perQty 件，
+     數量掣一步跳一份（5 → 10 → 15）。內部 state.picked 一直用「份」數。
+   - 350ml 杯裝：1 份 = 1 杯，畫面顯示「杯」。 */
+function per(m){ return (m.perQty > 1 && m.unit && m.unit !== "ml") ? m.perQty : 1; }
+// ml 裝：糖水用「碗」，飲品用「杯」
+function cupName(m){ return m.cat === "dessert" ? "碗" : "杯"; }
+function unitName(m){ return per(m) > 1 ? m.unit : (m.unit === "ml" ? cupName(m) : "份"); }
+function shown(m, n){ return Number(n) * per(m); }                     // 份 → 畫面數字
+function fromShown(m, v){ return v === "" ? "" : Number(v) / per(m); } // 畫面數字 → 份（可能係小數，等 qtyError 捉）
+// 「10 件（2 份）」／「2 杯」
+function qtyLabel(m, n){
+  n = Number(n) || 0;
+  if(per(m) === 1) return n + " " + unitName(m);
+  return shown(m, n) + " " + m.unit + "（" + n + " 份）";
+}
+// 價錢後面直接寫份量：「$108 / 1份(10杯)」；杯裝 xlsx 淨係寫 350ml，補返「1杯(350ml)」
+function portionText(m){
+  if(m.unit === "ml" && m.portion && !/[杯碗]/.test(m.portion)) return "1" + cupName(m) + "(" + m.portion + ")";
+  return m.portion || unitName(m);
+}
+function perLabel(m){ return "/ " + portionText(m); }
+
 /* ============================================================
    4. 狀態
    ============================================================ */
 const state = {
   picked: {},          // {id: 數量}
-  cats: new Set(),     // 分類篩選
+  cats: new Set(),     // 分類（大類）
+  subs: new Set(),     // 系列（子分類）
   diets: new Set(),    // 飲食需要
+  serving: new Set(),  // 食用需要
   q: "",
   priceMax: 400,
   onlyStar: false,
   onlyPicked: false,
-  submitted: false     // 撳過落單之後先即時顯示錯誤
+  collapsed: new Set(),// 收起咗嘅分類（糖水／小食／飲品）
+  step: 1,             // 1 揀食物 → 2 送貨資料 → 3 確認頁
+  foodTried: false,    // 撳過「下一步」之後先即時顯示食物錯誤
+  submitted: false     // 撳過「落單」之後先即時顯示全部錯誤
 };
 
 const $ = function(s){ return document.querySelector(s); };
@@ -44,7 +74,7 @@ const esc = function(s){
 };
 
 /* ============================================================
-   4b. 工作天（星期一至五，扣除 CONFIG.holidays）
+   5. 工作天（星期一至五，扣除 CONFIG.holidays）
    ============================================================ */
 function ymd(d){
   const p = function(n){ return String(n).padStart(2, "0"); };
@@ -73,9 +103,42 @@ function minDateStr(){ return CONFIG.allowRushOrders ? tomorrowStr() : leadDateS
 function isRushDate(dateStr){ return !!dateStr && dateStr < leadDateStr(); }
 
 /* ============================================================
-   5. 篩選側欄
+   6. 招牌 header — sticky 高度、臨時橫額
+      （漏斗掣喺 §7 篩選，購物車掣喺 §12）
    ============================================================ */
-function chipGroup(el, values, set){
+function setQ(v){
+  state.q = v.trim();
+  if($("#q").value !== v) $("#q").value = v;
+  renderMenu();
+}
+
+function initHeader(){
+  // 招牌係 sticky：量度高度，畀篩選欄同 scroll-padding 用（--head-h）
+  const head = $(".masthead");
+  const setHeadH = function(){ document.documentElement.style.setProperty("--head-h", head.offsetHeight + "px"); };
+  setHeadH();
+  if(window.ResizeObserver) new ResizeObserver(setHeadH).observe(head);
+  window.addEventListener("resize", setHeadH);
+
+  // 臨時橫額（placeholder，規則見 README）：箭嘴收起／展開，今次瀏覽記住
+  const banner = $("#banner"), bannerBtn = $("#bannerToggle");
+  const setBanner = function(collapsed){
+    banner.classList.toggle("collapsed", collapsed);
+    bannerBtn.setAttribute("aria-expanded", String(!collapsed));
+    bannerBtn.setAttribute("aria-label", collapsed ? "展開優惠資訊" : "收起優惠資訊");
+  };
+  try{ setBanner(sessionStorage.getItem("bannerCollapsed") === "1"); }catch(e){}
+  bannerBtn.addEventListener("click", function(){
+    const collapsed = !banner.classList.contains("collapsed");
+    setBanner(collapsed);
+    try{ sessionStorage.setItem("bannerCollapsed", collapsed ? "1" : "0"); }catch(e){}
+  });
+}
+
+/* ============================================================
+   7. 篩選側欄
+   ============================================================ */
+function chipGroup(el, values, set, onChange){
   el.innerHTML = "";
   const wrap = document.createElement("div");
   wrap.className = "chips";
@@ -88,6 +151,7 @@ function chipGroup(el, values, set){
     b.addEventListener("click", function(){
       if(set.has(v.key)) set.delete(v.key); else set.add(v.key);
       b.setAttribute("aria-pressed", set.has(v.key) ? "true" : "false");
+      if(onChange) onChange();
       renderMenu();
     });
     wrap.appendChild(b);
@@ -95,15 +159,53 @@ function chipGroup(el, values, set){
   el.appendChild(wrap);
 }
 
+// 系列 chips：由餐單抽出，揀咗分類就只顯示嗰啲分類嘅系列
+function subOptions(){
+  const seen = new Set(), out = [];
+  MENU.forEach(function(m){
+    if(!m.sub) return;
+    if(state.cats.size && !state.cats.has(m.cat)) return;
+    if(seen.has(m.sub)) return;
+    seen.add(m.sub);
+    out.push({ key: m.sub, label: m.sub.replace(/系列/g, "") });   // 「芒果系列」→「芒果」
+  });
+  return out;
+}
+
+function buildSubChips(){
+  // 分類變咗，唔再見到嘅系列要一併取消
+  const allowed = new Set(subOptions().map(function(o){ return o.key; }));
+  state.subs.forEach(function(k){ if(!allowed.has(k)) state.subs.delete(k); });
+  chipGroup($("#subOpts"), subOptions(), state.subs);
+}
+
 function buildChips(){
-  chipGroup($("#catOpts"), CATEGORIES.map(function(c){ return { key: c.key, label: c.label }; }), state.cats);
+  chipGroup($("#catOpts"), CATEGORIES.map(function(c){ return { key: c.key, label: c.label }; }), state.cats, buildSubChips);
+  buildSubChips();
   chipGroup($("#dietOpts"), DIETS.map(function(d){ return { key: d.key, label: d.label }; }), state.diets);
+  chipGroup($("#servOpts"), SERVING.map(function(d){ return { key: d.key, label: d.label }; }), state.serving);
+}
+
+// 有幾多個篩選條件生效（漏斗掣個數字）
+function activeFilterCount(){
+  return state.cats.size + state.subs.size + state.diets.size + state.serving.size +
+         (state.onlyStar ? 1 : 0) + (state.onlyPicked ? 1 : 0) +
+         (state.priceMax < 400 ? 1 : 0) + (state.q ? 1 : 0);
+}
+
+function updateFilterUi(){
+  const n = activeFilterCount();
+  $("#filterN").textContent = n;
+  $("#filterN").hidden = n === 0;
+  $("#filterResetBtn").hidden = n === 0;        // 有篩選先顯示「清除篩選」掣
+  const shown = visibleItems().length;
+  $("#filterDone").textContent = n === 0 ? "顯示全部 " + MENU.length + " 款" : "顯示 " + shown + " 款";
 }
 
 function buildFilters(){
   buildChips();
 
-  $("#q").addEventListener("input", function(e){ state.q = e.target.value.trim(); renderMenu(); });
+  $("#q").addEventListener("input", function(e){ setQ(e.target.value); });
 
   $("#priceMax").addEventListener("input", function(e){
     state.priceMax = +e.target.value;
@@ -115,23 +217,31 @@ function buildFilters(){
   $("#onlyPicked").addEventListener("change", function(e){ state.onlyPicked = e.target.checked; renderMenu(); });
 
   $("#reset").addEventListener("click", function(){
-    state.cats.clear(); state.diets.clear();
-    state.q = ""; state.priceMax = 400; state.onlyPicked = false; state.onlyStar = false;
-    $("#q").value = ""; $("#priceMax").value = 400; $("#priceLbl").textContent = "唔限價錢";
+    state.cats.clear(); state.subs.clear(); state.diets.clear(); state.serving.clear();
+    state.priceMax = 400; state.onlyPicked = false; state.onlyStar = false;
+    setQ("");
+    $("#priceMax").value = 400; $("#priceLbl").textContent = "唔限價錢";
     $("#onlyPicked").checked = false; $("#onlyStar").checked = false;
     buildChips();
     renderMenu();
   });
 
-  $("#fToggle").addEventListener("click", function(){
-    const open = $("#fpanel").classList.toggle("open");
-    $("#fToggle").setAttribute("aria-expanded", String(open));
+  // 招牌「清除篩選」掣 = 側欄個 清除篩選
+  $("#filterResetBtn").addEventListener("click", function(){ $("#reset").click(); });
+
+  // 漏斗掣（窄版）→ 將 #fpanel（搜尋 + 篩選）搬入彈出視窗；關閉就搬返側欄
+  const dlg = $("#filterDlg"), panel = $("#fpanel");
+  $("#filterBtn").addEventListener("click", function(){
+    $("#filterHost").appendChild(panel);
+    updateFilterUi();
+    dlg.showModal();
   });
+  dlg.addEventListener("close", function(){ $("#filtersAside").appendChild(panel); });
+  dlg.addEventListener("click", function(e){ if(e.target === e.currentTarget) e.currentTarget.close(); });
 
   // 度身定製 / 招牌 WhatsApp
   const custom = "想度身定製一個辦公室到會餐單：\n場合：\n人數：\n日期／時間：\n預算：\n特別要求：";
   $("#customCta").href = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(custom);
-  $("#waHead").href = "https://wa.me/" + CONFIG.whatsappNumber;
 }
 
 function visibleItems(){
@@ -143,24 +253,29 @@ function visibleItems(){
   return MENU.filter(function(m){
     if(rush && !m.rush) return false;
     if(state.cats.size && !state.cats.has(m.cat)) return false;
+    if(state.subs.size && !state.subs.has(m.sub)) return false;
     if(state.onlyStar && !m.signature) return false;
     if(m.price > state.priceMax) return false;
     if(state.q){
-      const hay = m.name + (m.portion || "") + CAT[m.cat].label + m.tags.join("");
+      const hay = m.name + (m.portion || "") + CAT[m.cat].label + (m.sub || "") + m.tags.join("");
       if(hay.toLowerCase().indexOf(state.q.toLowerCase()) === -1) return false;
     }
-    for(const d of DIETS){
-      if(!state.diets.has(d.key)) continue;
-      const has = m.tags.indexOf(d.key) !== -1;
-      if(d.mode === "include" && !has) return false;
-      if(d.mode === "exclude" && has) return false;
-    }
+    const tagOk = function(list, picked){
+      for(const d of list){
+        if(!picked.has(d.key)) continue;
+        const has = m.tags.indexOf(d.key) !== -1;
+        if(d.mode === "include" && !has) return false;
+        if(d.mode === "exclude" && has) return false;
+      }
+      return true;
+    };
+    if(!tagOk(DIETS, state.diets) || !tagOk(SERVING, state.serving)) return false;
     return true;
   });
 }
 
 /* ============================================================
-   6. 畫餐單
+   8. 畫餐單
    ============================================================ */
 function tagHtml(m){
   const all = (m.signature ? ["皇牌"] : []).concat(m.tags);
@@ -172,13 +287,14 @@ function tagHtml(m){
 
 function pricePill(m){
   return '<span class="pricepill"><s>' + money(m.list) + "</s>" +
-         '<span class="now">' + money(m.price) + '</span><span class="per">/份</span></span>';
+         '<span class="now">' + money(m.price) + '</span><span class="per">' + perLabel(m) + '</span></span>';
 }
 
 function renderMenu(){
   const wrap = $("#menu");
   const items = visibleItems();
   wrap.innerHTML = "";
+  updateFilterUi();
 
   // 急單提示
   const rush = isRushDate($("#fDate").value);
@@ -197,12 +313,18 @@ function renderMenu(){
     const inCat = items.filter(function(m){ return m.cat === cat.key; });
     if(!inCat.length) return;
 
+    const collapsed = state.collapsed.has(cat.key);
+    const pickedHere = inCat.filter(function(m){ return m.id in state.picked; }).length;
     const sec = document.createElement("section");
-    sec.className = "course";
+    sec.className = "course" + (collapsed ? " collapsed" : "");
+    // 成個分類標題係一個掣：撳一下收起／展開下面嘅菜式
     sec.innerHTML =
-      '<div class="course-head"><h2>' + esc(cat.label) + '</h2>' +
-      '<span class="note">' + esc(cat.note || "") + '</span>' +
-      '<span class="n">' + inCat.length + ' 款</span></div>';
+      '<button type="button" class="course-head" data-course="' + cat.key + '" aria-expanded="' + (!collapsed) + '">' +
+        '<h2>' + esc(cat.label) + '</h2>' +
+        '<span class="note">' + esc(cat.note || "") + '</span>' +
+        '<span class="n">' + inCat.length + ' 款' + (pickedHere ? '・已揀 ' + pickedHere : '') + '</span>' +
+        '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 8.3a1 1 0 0 1 1.4 0L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.4l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.4z"/></svg>' +
+      '</button>';
 
     inCat.forEach(function(m){
       const on = m.id in state.picked;
@@ -212,20 +334,17 @@ function renderMenu(){
       row.innerHTML =
         '<img src="' + m.img + '" alt="' + esc(m.name) + '" loading="lazy" data-sheet="' + m.id + '">' +
         '<div class="dish-body">' +
-          '<div class="dish-line">' +
-            '<span class="dish-name"><button type="button" data-sheet="' + m.id + '">' + esc(m.name) + '</button></span>' +
-            pricePill(m) +
-          '</div>' +
-          '<p class="portion">份量 <b>' + esc(m.portion) + '</b></p>' +
-          '<div class="meta">' + tagHtml(m) + '</div>' +
+          '<div class="dish-name"><button type="button" data-sheet="' + m.id + '">' + esc(m.name) + '</button></div>' +
+          '<div class="dish-line">' + pricePill(m) + '</div>' +
+          (m.tags.length || m.signature ? '<div class="meta">' + tagHtml(m) + '</div>' : "") +
         '</div>' +
         '<div class="pick">' +
           '<label class="tick"><input type="checkbox" data-pick="' + m.id + '"' + (on ? " checked" : "") + '>' +
             '<span>' + (on ? "已揀" : "揀呢款") + '</span></label>' +
           '<div class="qty"' + (on ? "" : " hidden") + '>' +
             '<button type="button" data-step="-1" data-id="' + m.id + '" aria-label="減少 ' + esc(m.name) + '">−</button>' +
-            '<input type="number" data-qty="' + m.id + '" value="' + (on ? state.picked[m.id] : 1) +
-              '" min="1" max="' + CONFIG.maxQty + '" inputmode="numeric" aria-label="' + esc(m.name) + ' 份數">' +
+            '<input type="number" data-qty="' + m.id + '" value="' + (on ? shown(m, state.picked[m.id]) : per(m)) +
+              '" min="' + per(m) + '" step="' + per(m) + '" max="' + (CONFIG.maxQty * per(m)) + '" inputmode="numeric" aria-label="' + esc(m.name) + ' 數量（' + esc(unitName(m)) + '）">' +
             '<button type="button" data-step="1" data-id="' + m.id + '" aria-label="增加 ' + esc(m.name) + '">+</button>' +
           '</div>' +
           '<span class="line-total"></span>' +
@@ -276,18 +395,19 @@ function paintRow(id){
   }
 
   const raw = state.picked[id];
-  if(input.value !== String(raw)) input.value = raw;
-  const err = qtyError(raw);
+  const want = raw === "" ? "" : String(shown(m, raw));
+  if(input.value !== want) input.value = want;
+  const err = qtyError(raw, m);
   minus.disabled = !(raw > 1);
   plus.disabled = !(raw < CONFIG.maxQty);
 
   if(err){
     lineTotal.textContent = "";
     errBox.textContent = err;
-    row.classList.toggle("bad", state.submitted);
-    qtyBox.classList.toggle("bad", state.submitted);
+    row.classList.toggle("bad", state.submitted || state.foodTried);
+    qtyBox.classList.toggle("bad", state.submitted || state.foodTried);
   }else{
-    lineTotal.textContent = raw + " 份 × " + money(m.price) + " = " + money(raw * m.price);
+    lineTotal.textContent = qtyLabel(m, raw) + " × " + money(m.price) + " = " + money(raw * m.price);
     errBox.textContent = "";
     row.classList.remove("bad");
     qtyBox.classList.remove("bad");
@@ -295,7 +415,7 @@ function paintRow(id){
 }
 
 /* ============================================================
-   6b. 菜式詳情 sheet
+   9. 菜式詳情 sheet
    ============================================================ */
 const SHEET = { id: null };
 
@@ -308,38 +428,55 @@ function openSheet(id){
   $("#shCat").textContent = CAT[m.cat].label + (CAT[m.cat].note ? "・" + CAT[m.cat].note : "");
   $("#shName").textContent = m.name;
   $("#shPrice").innerHTML = pricePill(m);
-  $("#shPortion").textContent = "份量：" + m.portion;
   $("#shTags").innerHTML = tagHtml(m) || '<span class="tag">冇特別標籤</span>';
+  $("#shQtyLbl").textContent = per(m) > 1
+    ? "數量（" + m.unit + "）・每份 " + per(m) + " " + m.unit
+    : "數量（" + unitName(m) + "）";
+  $("#shQty").min = per(m); $("#shQty").step = per(m); $("#shQty").max = CONFIG.maxQty * per(m);
   const cur = Number(state.picked[id]) || 0;
-  $("#shQty").value = cur > 0 ? cur : 1;
+  $("#shQty").value = shown(m, cur > 0 ? cur : 1);
   $("#shAdd").textContent = cur > 0 ? "更新數量" : "加入訂單";
+  sheetLine();
   $("#sheet").showModal();
 }
 
-function sheetQty(){ return Math.max(0, Math.min(CONFIG.maxQty, Math.floor(Number($("#shQty").value) || 0))); }
+// 畫面數字 → 份（打咗唔係整份就向上湊夠一份）
+function sheetQty(){
+  const m = byId(SHEET.id);
+  const n = Math.ceil((Number($("#shQty").value) || 0) / per(m));
+  return Math.max(0, Math.min(CONFIG.maxQty, n));
+}
+function sheetSet(n){ $("#shQty").value = shown(byId(SHEET.id), n); sheetLine(); }
+function sheetLine(){
+  const m = byId(SHEET.id), n = sheetQty();
+  $("#shLine").textContent = n > 0 ? qtyLabel(m, n) + " × " + money(m.price) + " = " + money(n * m.price) : "";
+}
 
-$("#shMinus").addEventListener("click", function(){ $("#shQty").value = Math.max(0, sheetQty() - 1); });
-$("#shPlus").addEventListener("click", function(){ $("#shQty").value = Math.min(CONFIG.maxQty, sheetQty() + 1); });
+$("#shMinus").addEventListener("click", function(){ sheetSet(Math.max(0, sheetQty() - 1)); });
+$("#shPlus").addEventListener("click", function(){ sheetSet(Math.min(CONFIG.maxQty, sheetQty() + 1)); });
+$("#shQty").addEventListener("change", function(){ sheetSet(sheetQty()); });   // 離開個框就湊返整份
+$("#shQty").addEventListener("input", sheetLine);
 $("#shAdd").addEventListener("click", function(){
   const n = sheetQty();
   if(n <= 0) delete state.picked[SHEET.id]; else state.picked[SHEET.id] = n;
   paintRow(SHEET.id);
   updateBar();
-  if(state.submitted) validate(false);
+  revalidate();
 });
 $("#sheet").addEventListener("click", function(e){
   if(e.target === e.currentTarget) e.currentTarget.close();   // 撳背景關閉
 });
 
 /* ============================================================
-   7. 數量 / 剔選 事件（用事件委派，行數少啲）
+   10. 數量 / 剔選 事件（用事件委派，行數少啲）
    ============================================================ */
-function qtyError(v){
-  if(v === "" || v === null || typeof v === "undefined") return "請填份數";
+function qtyError(v, m){
+  const p = m ? per(m) : 1, u = m ? unitName(m) : "份";
+  if(v === "" || v === null || typeof v === "undefined") return "請填數量";
   const n = Number(v);
-  if(!Number.isInteger(n)) return "份數要係整數";
-  if(n < 1) return "最少 1 份";
-  if(n > CONFIG.maxQty) return "單一款最多 " + CONFIG.maxQty + " 份，多過呢個數請 WhatsApp 落單";
+  if(!Number.isInteger(n)) return p > 1 ? "每份 " + p + " " + u + "，請填 " + p + " 嘅倍數" : "數量要係整數";
+  if(n < 1) return "最少 " + p + " " + u;
+  if(n > CONFIG.maxQty) return "單一款最多 " + (CONFIG.maxQty * p) + " " + u + "，多過呢個數請 WhatsApp 落單";
   return "";
 }
 
@@ -354,7 +491,7 @@ document.addEventListener("change", function(e){
     }
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
   }
 });
 
@@ -364,10 +501,10 @@ document.addEventListener("input", function(e){
     const id = q.dataset.qty;
     if(!(id in state.picked)) return;
     const raw = q.value.trim();
-    state.picked[id] = raw === "" ? "" : Number(raw);
+    state.picked[id] = fromShown(byId(id), raw);
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
   }
 });
 
@@ -381,15 +518,22 @@ document.addEventListener("click", function(e){
     state.picked[id] = next;
     paintRow(id);
     updateBar();
-    if(state.submitted) validate(false);
+    revalidate();
     return;
   }
   const sh = e.target.closest ? e.target.closest("[data-sheet]") : null;
-  if(sh){ openSheet(sh.dataset.sheet); }
+  if(sh){ openSheet(sh.dataset.sheet); return; }
+  const head = e.target.closest ? e.target.closest("[data-course]") : null;
+  if(head){
+    const key = head.dataset.course, sec = head.closest(".course");
+    if(state.collapsed.has(key)) state.collapsed.delete(key); else state.collapsed.add(key);
+    sec.classList.toggle("collapsed", state.collapsed.has(key));
+    head.setAttribute("aria-expanded", String(!state.collapsed.has(key)));
+  }
 });
 
 /* ============================================================
-   8. 埋單計數
+   11. 埋單計數
       line_total = 9折價 × 份數
       subtotal   = Σ line_total
       運費       = subtotal >= 1500 ? 0 : 標準運費
@@ -412,11 +556,25 @@ function totals(){
            count: count, kinds: Object.keys(state.picked).length };
 }
 
+// 分類標題右邊「N 款・已揀 M」，剔選有變就更新（收起咗都知入面揀咗幾多）
+function paintCourseHeads(){
+  document.querySelectorAll("[data-course]").forEach(function(head){
+    const sec = head.closest(".course");
+    const total = sec.querySelectorAll(".dish").length;
+    const picked = sec.querySelectorAll(".dish.on").length;
+    head.querySelector(".n").textContent = total + " 款" + (picked ? "・已揀 " + picked : "");
+  });
+}
+
 function updateBar(){
+  paintCourseHeads();
   const t = totals();
   $("#pickedN").textContent = t.kinds;
   $("#barCnt").textContent = t.kinds === 0 ? "未揀食物" : "已揀 " + t.kinds + " 款 · 共 " + t.count + " 份";
   $("#barAmt").textContent = money(t.total);
+  $("#cartN").textContent = t.kinds;
+  $("#cartN").hidden = t.kinds === 0;
+  if($("#cart").open) renderCart();
 
   let b = "";
   if(t.subtotal > 0){
@@ -435,7 +593,129 @@ function updateBar(){
 }
 
 /* ============================================================
-   9. 驗證
+   12. 已揀食物（購物車）— 招牌右上角個掣
+   ============================================================ */
+function renderCart(){
+  const ids = Object.keys(state.picked);
+  const list = $("#cartList");
+  if(!ids.length){
+    list.innerHTML = '<div class="cart-empty">仲未揀食物<br><span class="muted">喺餐單剔選想要嘅菜式</span></div>';
+    $("#cartTot").innerHTML = "";
+    $("#cartGo").disabled = true;
+    return;
+  }
+  $("#cartGo").disabled = false;
+  list.innerHTML = ids.map(function(id){
+    const m = byId(id);
+    const raw = state.picked[id];
+    const err = qtyError(raw, m);
+    return '<div class="c-row" data-crow="' + id + '">' +
+      '<div><div class="c-name">' + esc(m.name) + '</div>' +
+      '<div class="c-meta">' + esc(CAT[m.cat].label) + '・' + money(m.price) + ' ' + esc(perLabel(m)) + '</div></div>' +
+      '<div class="c-ctl">' +
+        '<div class="qty' + (err ? " bad" : "") + '">' +
+          '<button type="button" data-cstep="-1" data-cid="' + id + '" aria-label="減少"' + (raw > 1 ? "" : " disabled") + '>−</button>' +
+          '<input type="number" data-cqty="' + id + '" value="' + (raw === "" ? "" : shown(m, raw)) + '" min="' + per(m) + '" step="' + per(m) + '" max="' + (CONFIG.maxQty * per(m)) + '" inputmode="numeric" aria-label="數量（' + esc(unitName(m)) + '）">' +
+          '<button type="button" data-cstep="1" data-cid="' + id + '" aria-label="增加"' + (raw < CONFIG.maxQty ? "" : " disabled") + '>+</button>' +
+        '</div>' +
+        '<button type="button" class="c-del" data-cdel="' + id + '" aria-label="移除">×</button>' +
+      '</div>' +
+      '<div class="c-line' + (err ? " err" : "") + '">' + (err ? esc(err) : esc(qtyLabel(m, raw)) + " × " + money(m.price) + " = " + money(raw * m.price)) + '</div>' +
+    '</div>';
+  }).join("");
+
+  const t = totals();
+  let h = '<div class="r"><span>小計（已計 9 折，慳咗 ' + money(t.saved) + '）</span><span>' + money(t.subtotal) + '</span></div>';
+  h += '<div class="r"><span>運費</span><span>' + (t.fee === 0 ? "免費" : money(t.fee)) + '</span></div>';
+  if(t.fee > 0) h += '<div class="muted">再加 ' + money(CONFIG.freeDeliveryAt - t.subtotal) + ' 即免運費</div>';
+  if(t.walkup > 0) h += '<div class="r"><span>送上寫字樓</span><span>+' + money(t.walkup) + '</span></div>';
+  h += '<div class="r grand"><span>總計</span><span>' + money(t.total) + '</span></div>';
+  $("#cartTot").innerHTML = h;
+}
+
+function setPicked(id, v){
+  if(v === null) delete state.picked[id]; else state.picked[id] = v;
+  paintRow(id);
+  updateBar();
+  revalidate();
+}
+
+$("#cartBtn").addEventListener("click", function(){ renderCart(); $("#cart").showModal(); });
+$("#cart").addEventListener("click", function(e){
+  if(e.target === e.currentTarget){ e.currentTarget.close(); return; }
+  const del = e.target.closest("[data-cdel]");
+  if(del){ setPicked(del.dataset.cdel, null); return; }
+  const step = e.target.closest("[data-cstep]");
+  if(step){
+    const id = step.dataset.cid;
+    const cur = Number(state.picked[id]) || 0;
+    setPicked(id, Math.min(CONFIG.maxQty, Math.max(1, cur + Number(step.dataset.cstep))));
+  }
+});
+$("#cart").addEventListener("input", function(e){
+  const q = e.target.closest("[data-cqty]");
+  if(!q) return;
+  const id = q.dataset.cqty;
+  const raw = fromShown(byId(id), q.value.trim());
+  // 打字期間唔重畫成個 list，免得 input 失焦
+  state.picked[id] = raw;
+  paintRow(id);
+  const t = totals();
+  $("#cartN").textContent = t.kinds;
+  $("#barCnt").textContent = "已揀 " + t.kinds + " 款 · 共 " + t.count + " 份";
+  $("#barAmt").textContent = money(t.total);
+  const row = q.closest(".c-row"), line = row.querySelector(".c-line"), m = byId(id), err = qtyError(state.picked[id], m);
+  line.classList.toggle("err", !!err);
+  row.querySelector(".qty").classList.toggle("bad", !!err);
+  line.textContent = err ? err : qtyLabel(m, raw) + " × " + money(m.price) + " = " + money(raw * m.price);
+  revalidate();
+});
+$("#cart").addEventListener("change", function(e){
+  if(e.target.closest("[data-cqty]")) renderCart();   // 打完字先整齊重畫
+});
+$("#cartGo").addEventListener("click", function(){
+  $("#cart").close();
+  goDelivery();
+});
+
+/* ============================================================
+   13. 步驟切換：1 揀食物 → 2 送貨資料 → 3 確認頁
+   ============================================================ */
+function showStep(n){
+  state.step = n;
+  document.body.dataset.view = n;          // CSS 用嚟收起唔關事嘅招牌掣（唔用 data-step，避免撞到數量掣）
+  $("#orderView").hidden = n !== 1;
+  $("#deliveryView").hidden = n !== 2;
+  $("#doneView").hidden = n !== 3;
+  $("#orderbar").hidden = n === 3;
+  $("#barBack").hidden = n !== 2;
+  $("#submitBtn").textContent = n === 1 ? "下一步" : "落單";
+  // 錯誤總覽跟住當前步驟走
+  (n === 1 ? $("#errSlot1") : $("#errSlot2")).appendChild($("#errBox"));
+  if(n === 2 && ADDR.map) setTimeout(function(){ ADDR.map.invalidateSize(); }, 60);
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+// 由餐單去送貨資料：先檢查食物部分
+function goDelivery(){
+  if(state.step === 2) return;
+  state.foodTried = true;
+  if(!validate(true, true)) return;
+  showStep(2);
+}
+
+// 改動之後即時重新檢查（只喺用戶試過提交先會顯示錯誤）
+function revalidate(){
+  if(state.submitted) validate(false);
+  else if(state.foodTried) validate(false, true);
+}
+
+$("#barBack").addEventListener("click", function(){ showStep(1); });
+$("#backToMenu").addEventListener("click", function(){ showStep(1); });
+$("#reviewCart").addEventListener("click", function(){ renderCart(); $("#cart").showModal(); });
+
+/* ============================================================
+   14. 驗證
    ============================================================ */
 function setFieldError(name, msg){
   const f = document.querySelector('.field[data-f="' + name + '"]');
@@ -449,7 +729,7 @@ function hkPhoneOk(v){
   return /^[23569]\d{7}$/.test(d);
 }
 
-function validate(scroll){
+function validate(scroll, foodOnly){
   const problems = []; // {msg, focus}
   const t = totals();
   const date = $("#fDate").value;
@@ -461,7 +741,7 @@ function validate(scroll){
   }
   Object.keys(state.picked).forEach(function(id){
     const m = byId(id);
-    const err = qtyError(state.picked[id]);
+    const err = qtyError(state.picked[id], m);
     if(err){
       problems.push({ msg: m.name + "：" + err, focus: "#dish-" + id });
     }else if(rush && !m.rush){
@@ -475,7 +755,8 @@ function validate(scroll){
     });
   }
 
-  // --- 送貨資料 ---
+  // --- 送貨資料（第一步只檢查食物）---
+  if(!foodOnly){
   const name = $("#fName").value.trim();
   if(name.length < 2){
     setFieldError("name", "請填聯絡人姓名");
@@ -490,11 +771,6 @@ function validate(scroll){
     setFieldError("phone", "香港電話係 8 位數字，開頭 2/3/5/6/9");
     problems.push({ msg: "電話格式唔啱", focus: "#fPhone" });
   } else setFieldError("phone", "");
-
-  if(!$("#fOccasion").value){
-    setFieldError("occasion", "請揀場合");
-    problems.push({ msg: "未揀場合", focus: "#fOccasion" });
-  } else setFieldError("occasion", "");
 
   if(!date){
     setFieldError("date", "請揀送貨日期");
@@ -544,6 +820,7 @@ function validate(scroll){
     setFieldError("terms", "請先閱讀並同意落單須知");
     problems.push({ msg: "未同意落單須知", focus: "#fTerms" });
   } else setFieldError("terms", "");
+  }
 
   // --- 顯示 ---
   const box = $("#errBox"), list = $("#errList");
@@ -573,25 +850,29 @@ function validate(scroll){
 function jumpTo(sel){
   const el = document.querySelector(sel);
   if(!el) return;
+  const fold = el.closest("details");
+  if(fold) fold.open = true;
+  if(state.step !== 3){
+    const inMenu = !!el.closest("#orderView");
+    if(inMenu && state.step !== 1) showStep(1);
+    if(!inMenu && state.step !== 2) showStep(2);
+  }
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   if(el.matches("input,select,textarea")) setTimeout(function(){ el.focus({ preventScroll: true }); }, 300);
 }
 
 // 一填好就即時清走已經改好嘅錯誤
-["#fName","#fPhone","#fOccasion","#fDate","#fTime","#fDistrict","#fAddr","#fUnit","#fTerms"].forEach(function(sel){
-  document.querySelector(sel).addEventListener("input", function(){ if(state.submitted) validate(false); });
-  document.querySelector(sel).addEventListener("change", function(){ if(state.submitted) validate(false); });
+["#fName","#fPhone","#fDate","#fTime","#fDistrict","#fAddr","#fUnit","#fTerms"].forEach(function(sel){
+  document.querySelector(sel).addEventListener("input", function(){ revalidate(); });
+  document.querySelector(sel).addEventListener("change", function(){ revalidate(); });
 });
 // 改日期 → 急單篩選可能改變
 $("#fDate").addEventListener("change", renderMenu);
 // 送上寫字樓 → 總數即時變
-$("#fWalkup").addEventListener("change", function(e){
-  $("#walkupNote").classList.toggle("on", e.target.checked);
-  updateBar();
-});
+$("#fWalkup").addEventListener("change", updateBar);
 
 /* ============================================================
-   10. 落單 → 確認頁
+   15. 落單 → 確認頁
    ============================================================ */
 function orderNo(){
   const d = new Date();
@@ -606,8 +887,8 @@ function orderLines(){
     const n = Number(state.picked[id]);
     // 標籤跟住訂單走：敏感（含堅果）同辣度一定要落到 WhatsApp
     const tags = (m.signature ? ["皇牌"] : []).concat(m.tags);
-    return { id: id, name: m.name, cat: CAT[m.cat].label, portion: m.portion, qty: n,
-             unit: m.price, amount: m.price * n, tags: tags };
+    return { id: id, name: m.name, cat: CAT[m.cat].label, portion: portionText(m), qty: n,
+             qtyText: qtyLabel(m, n), unit: m.price, amount: m.price * n, tags: tags };
   });
 }
 
@@ -618,7 +899,7 @@ function buildMessage(o){
   L.push("");
   L.push("── 食物（價錢為每份總價，已計 " + CONFIG.discountLabel + "）──");
   o.lines.forEach(function(l){
-    L.push("• " + l.name + "（" + l.cat + "・" + l.portion + "）× " + l.qty + "　" + money(l.amount) +
+    L.push("• " + l.name + "（" + l.cat + "・" + l.portion + "）" + l.qtyText + "　" + money(l.amount) +
            (l.tags.length ? "　[" + l.tags.join("・") + "]" : ""));
   });
   L.push("");
@@ -631,7 +912,6 @@ function buildMessage(o){
   L.push("聯絡人：" + o.name);
   L.push("電話：" + o.phone);
   if(o.company) L.push("公司：" + o.company);
-  L.push("場合：" + o.occasion);
   L.push("日期：" + o.date + " " + o.time + (o.rush ? "（急單）" : ""));
   L.push("地址：" + o.addr);
   L.push("樓層／單位：" + o.unit + (o.walkup > 0 ? "（送上寫字樓）" : "（地面交收）"));
@@ -646,6 +926,7 @@ function buildMessage(o){
 let lastMessage = "";
 
 $("#submitBtn").addEventListener("click", function(){
+  if(state.step === 1){ goDelivery(); return; }
   state.submitted = true;
   if(!validate(true)) return;
 
@@ -658,7 +939,6 @@ $("#submitBtn").addEventListener("click", function(){
     name: $("#fName").value.trim(),
     phone: $("#fPhone").value.trim(),
     company: $("#fCompany").value.trim(),
-    occasion: $("#fOccasion").value,
     date: $("#fDate").value,
     time: $("#fTime").value,
     rush: isRushDate($("#fDate").value),
@@ -674,7 +954,7 @@ $("#submitBtn").addEventListener("click", function(){
   $("#oItems").innerHTML = o.lines.map(function(l){
     return '<div class="srow"><span class="q">' + l.qty + "×</span><span>" + esc(l.name) +
            '</span><span class="l"></span><span class="v">' + money(l.amount) + "</span>" +
-           '<span class="sub">' + esc(l.portion) +
+           '<span class="sub">' + esc(l.qtyText) + "・" + esc(l.portion) +
            (l.tags.length ? "　" + l.tags.map(function(x){ return "[" + esc(x) + "]"; }).join(" ") : "") +
            "</span></div>";
   }).join("");
@@ -687,7 +967,6 @@ $("#submitBtn").addEventListener("click", function(){
   $("#oPayBy").textContent = o.payBy;
   $("#oInfo").innerHTML =
     info("聯絡人", esc(o.name) + "　" + esc(o.phone) + (o.company ? "　" + esc(o.company) : "")) +
-    info("場合", esc(o.occasion)) +
     info("時間", o.date + "　" + o.time + (o.rush ? "　<b>急單</b>" : "")) +
     info("地址", esc(o.addr) + "　" + esc(o.unit) +
       (o.mapUrl ? ' <a href="' + o.mapUrl + '" target="_blank" rel="noopener">地圖 ↗</a>' : "")) +
@@ -697,22 +976,14 @@ $("#submitBtn").addEventListener("click", function(){
   lastMessage = buildMessage(o);
   $("#waBtn").href = "https://wa.me/" + CONFIG.whatsappNumber + "?text=" + encodeURIComponent(lastMessage);
 
-  $("#orderView").hidden = true;
-  $("#orderbar").hidden = true;
-  $("#doneView").hidden = false;
-  window.scrollTo({ top: 0, behavior: "auto" });
+  showStep(3);
 });
 
 function info(k, v){
   return '<div class="info-line"><b>' + k + "</b><span>" + v + "</span></div>";
 }
 
-$("#backBtn").addEventListener("click", function(){
-  $("#doneView").hidden = true;
-  $("#orderView").hidden = false;
-  $("#orderbar").hidden = false;
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
-});
+$("#backBtn").addEventListener("click", function(){ showStep(2); });
 
 $("#copyBtn").addEventListener("click", function(){
   const btn = $("#copyBtn");
@@ -733,7 +1004,7 @@ $("#copyBtn").addEventListener("click", function(){
 });
 
 /* ============================================================
-   10b. 地址搜尋 + 地圖
+   16. 地址搜尋 + 地圖
    用政府「地址搜尋服務」(ALS)：免費、免 API key、中英文齊、附座標。
    想轉用 Google Places？淨係要改 lookupAddress() 一個 function。
    ============================================================ */
@@ -862,7 +1133,7 @@ function selectAddr(i){
     if(opt) $("#fDistrict").value = a.region;
   }
   showMap(a);
-  if(state.submitted) validate(false);
+  revalidate();
 }
 
 function clearPicked(){
@@ -959,7 +1230,7 @@ function initAddress(){
 
 
 /* ============================================================
-   11. 開機
+   17. 開機
    ============================================================ */
 (function init(){
   // 送貨時間選項
@@ -971,20 +1242,15 @@ function initAddress(){
     op.value = v; op.textContent = v;
     sel.appendChild(op);
   }
-  // 場合
-  const occ = $("#fOccasion");
-  OCCASIONS.forEach(function(o){
-    const op = document.createElement("option");
-    op.value = o; op.textContent = o;
-    occ.appendChild(op);
-  });
   // 日期下限：3 個工作天後（allowRushOrders 時可以早啲，但只見到急單款）
   const dEl = $("#fDate");
   dEl.min = minDateStr();
   dEl.value = leadDateStr();
-  $("#dateHint").textContent = "最少 " + CONFIG.leadWorkingDays + " 個工作天前，星期一至五";
+  $("#dateHint").textContent = "最早 " + leadDateStr().slice(5).replace("-", "/") + "，星期一至五";
 
+  initHeader();
   buildFilters();
   initAddress();
   renderMenu();
+  showStep(1);
 })();

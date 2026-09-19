@@ -12,35 +12,54 @@
 </head>
 <body>
 
+<!-- ================= 招牌（sticky） ================= -->
 <header class="masthead">
   <div class="masthead-in">
     <div class="shop">
-      <span class="logo-bar" aria-hidden="true"></span>
+      <div class="logo" aria-hidden="true">
+        <!-- 放 logo 圖喺度：<img src="images/logo.png" alt=""> -->
+      </div>
       <div>
         <h1>夜嚐野</h1>
-        <span class="en">Night After Night · 辦公室到會</span>
+        <span class="en">Night After Night</span>
       </div>
     </div>
-    <p class="terms">
-      <span class="promo">全單9折</span>
-      <span>全單滿 <b>$1,500</b> 免費送貨</span>
-      <span>請於 <b>3 個工作天</b> 前落單</span>
-      <span>地面交收，送上寫字樓 <b>+$100</b></span>
-    </p>
-    <div class="masthead-right">
-      <a class="call" id="waHead" href="#" target="_blank" rel="noopener">WhatsApp 6073 3422</a>
-      <div class="occ-line">會議茶點・午餐到會・公司活動・培訓聚會</div>
+    <div class="head-actions">
+      <button class="icon-btn" id="filterResetBtn" type="button" aria-label="清除篩選" title="清除篩選" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 .8 1.6L15 13v1.2l-2-2V12.7a1 1 0 0 1 .2-.6L18 6H6l3.1 4.1-1.4-1.4L3.2 5.6A1 1 0 0 1 4 4zm-.7 1.3 15.4 15.4a1 1 0 0 1-1.4 1.4l-4.3-4.3V20a1 1 0 0 1-1.5.9l-3-1.8a1 1 0 0 1-.5-.9v-4.5L1.9 6.7a1 1 0 0 1 1.4-1.4zM11 15.2v2.4l1 .6v-2z"/></svg>
+      </button>
+      <button class="icon-btn" id="filterBtn" type="button" aria-label="搵食物／篩選菜式" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 .8 1.6L14 14.3V20a1 1 0 0 1-1.5.9l-3-1.8a1 1 0 0 1-.5-.9v-3.9L3.2 5.6A1 1 0 0 1 4 4zm2 2 4.8 6.4a1 1 0 0 1 .2.6v4.6l1 .6v-5.2a1 1 0 0 1 .2-.6L17 6H6z"/></svg>
+        <span class="badge" id="filterN" hidden>0</span>
+      </button>
+      <button class="icon-btn" id="cartBtn" type="button" aria-label="睇已揀食物" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h2.2l.7 2H21a1 1 0 0 1 1 1.2l-1.6 7.2a1.5 1.5 0 0 1-1.5 1.1H8.3l.4 2H19a1 1 0 1 1 0 2H7.9a1.5 1.5 0 0 1-1.5-1.2L4.1 5H3a1 1 0 0 1 0-2zm3.5 4 1.4 6.5h10.2l1.4-6.5H6.5zM8.5 20a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm9 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+        <span class="badge" id="cartN" hidden>0</span>
+      </button>
     </div>
+  </div>
+
+  <!-- 臨時橫額（placeholder）：撳箭嘴收起成條，淨係留個細 tab 俾人再展開；顯示規則見 README「Header & announcement banner」 -->
+  <div class="banner" id="banner" role="region" aria-label="優惠及落單須知">
+    <div class="banner-in" id="bannerIn">
+      <div class="terms">
+        <p><span class="promo">全單9折</span><span>全單滿 <b>$1,500</b> 免費送貨</span><span>地面交收，送上寫字樓 <b>+$100</b></span></p>
+        <p><span>請於 <b>3 個工作天</b> 前落單</span><span>急單只提供部分美食</span></p>
+      </div>
+    </div>
+    <button class="banner-toggle" type="button" id="bannerToggle" aria-expanded="true" aria-controls="bannerIn" aria-label="收起優惠資訊">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 8.3a1 1 0 0 1 1.4 0L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.4l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.4z"/></svg>
+    </button>
   </div>
 </header>
 
-<!-- ================= 落單頁 ================= -->
+<!-- ================= 第一步：揀食物 ================= -->
 <main id="orderView">
   <div class="layout">
 
     <!-- 篩選 -->
-    <aside class="filters">
-      <button class="filter-toggle" id="fToggle" aria-expanded="false" aria-controls="fpanel">篩選菜式</button>
+    <!-- 闊版顯示喺側欄；窄版撳招牌個漏斗掣時，成個 #fpanel（連搜尋）會搬入 #filterDlg -->
+    <aside class="filters" id="filtersAside">
       <div class="fpanel" id="fpanel">
         <div class="fgroup">
           <h2>搵食物</h2>
@@ -51,11 +70,19 @@
           <div class="cgroup" id="catOpts"></div>
         </div>
         <div class="fgroup">
+          <h2>系列</h2>
+          <div class="cgroup" id="subOpts"></div>
+        </div>
+        <div class="fgroup">
           <label class="opt"><input type="checkbox" id="onlyStar"><span>只睇皇牌</span></label>
         </div>
         <div class="fgroup">
           <h2>飲食需要</h2>
           <div class="cgroup" id="dietOpts"></div>
+        </div>
+        <div class="fgroup">
+          <h2>食用需要</h2>
+          <div class="cgroup" id="servOpts"></div>
         </div>
         <div class="fgroup">
           <h2>每份價錢上限</h2>
@@ -76,101 +103,123 @@
       <div class="rush-note" id="rushNote" hidden></div>
       <div id="menu"></div>
 
-      <!-- 送貨資料 -->
-      <div class="delivery">
-        <h2>送貨資料</h2>
-        <p class="sub">我哋會用 WhatsApp 同你確認訂單同付款方法。</p>
-        <div class="grid2">
-          <div class="field" data-f="name">
-            <label for="fName">聯絡人姓名</label>
-            <input id="fName" type="text" autocomplete="name" placeholder="陳大文">
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="phone">
-            <label for="fPhone">電話 <span class="hint">8 位數字香港號碼</span></label>
-            <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="company">
-            <label for="fCompany">公司名稱 <span class="hint">選填</span></label>
-            <input id="fCompany" type="text" autocomplete="organization" placeholder="ABC Limited">
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="occasion">
-            <label for="fOccasion">場合</label>
-            <select id="fOccasion"><option value="">請揀場合</option></select>
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="date">
-            <label for="fDate">送貨日期 <span class="hint" id="dateHint"></span></label>
-            <input id="fDate" type="date">
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="time">
-            <label for="fTime">送貨時間</label>
-            <select id="fTime"><option value="">請揀時間</option></select>
-            <div class="err"></div>
-          </div>
-          <div class="field" data-f="district">
-            <label for="fDistrict">地區</label>
-            <select id="fDistrict">
-              <option value="">請揀地區</option>
-              <option>香港島</option><option>九龍</option><option>新界</option><option>離島</option>
-            </select>
-            <div class="err"></div>
-          </div>
-          <div class="field wide" data-f="addr">
-            <label for="fAddr">大廈／屋苑／街道 <span class="hint">打頭兩個字，喺下面揀返個地址</span></label>
-            <div class="addr-box">
-              <input id="fAddr" type="text" autocomplete="off" role="combobox"
-                     aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
-                     placeholder="例如：時代廣場、太古坊">
-              <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
-            </div>
-            <div class="picked-addr" id="pickedAddr" hidden></div>
-            <div class="map" id="map" hidden></div>
-            <div class="err"></div>
-          </div>
-          <div class="field wide" data-f="unit">
-            <label for="fUnit">樓層／單位 <span class="hint">地圖畀唔到呢個，一定要填</span></label>
-            <input id="fUnit" type="text" placeholder="12樓 1203室">
-            <div class="err"></div>
-          </div>
-          <div class="field wide" data-f="walkup">
-            <label class="opt toggle"><input type="checkbox" id="fWalkup"><span>要送上寫字樓／樓上</span></label>
-            <div class="walkup-note" id="walkupNote">預設<b>地面交收</b>。送上寫字樓或樓上每張訂單另加 <b>$100</b>。</div>
-            <div class="err"></div>
-          </div>
-          <div class="field wide" data-f="remark">
-            <label for="fRemark">備註 <span class="hint">選填，例如食物敏感、需要餐具</span></label>
-            <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對堅果敏感"></textarea>
-            <div class="err"></div>
-          </div>
-        </div>
-
-        <div class="policy">
-          <h3>落單須知</h3>
-          <ul>
-            <li>訂單確認後 <b>2 個工作天內</b>付全數。逾期未付款，訂單會自動取消。</li>
-            <li>訂單一經確認，<b>不可更改或取消</b>，已付款項恕不退還。</li>
-            <li>送貨當日如懸掛<b>八號或以上颱風信號</b>或<b>黑色暴雨警告</b>，當日訂單會取消，可於原訂單日期起 <b>2 個月內</b>改期。</li>
-          </ul>
-          <div class="field" data-f="terms">
-            <label class="opt terms-ok"><input type="checkbox" id="fTerms"><span>我已閱讀並同意以上條款</span></label>
-            <div class="err"></div>
-          </div>
-        </div>
-
-        <div class="summary-err" id="errBox" hidden aria-live="polite">
-          <h3>仲有幾樣要處理</h3>
-          <ul id="errList"></ul>
-        </div>
-      </div>
+      <div id="errSlot1"></div>
     </section>
   </div>
 </main>
 
-<!-- ================= 確認頁 ================= -->
+<!-- ================= 第二步：送貨資料 ================= -->
+<main id="deliveryView" hidden>
+  <div class="step-wrap">
+  <div class="delivery">
+    <button class="back-link" id="backToMenu" type="button">← 返回餐單</button>
+    <h2>送貨資料</h2>
+    <p class="sub">我哋會用 WhatsApp 同你確認訂單同付款方法。<button class="link" id="reviewCart" type="button">睇／修改已揀食物</button></p>
+    <!-- 三個短小節；短欄位兩個一行（手機都係） -->
+    <fieldset class="fset">
+      <legend>聯絡人</legend>
+      <div class="grid2">
+        <div class="field" data-f="name">
+          <label for="fName">姓名</label>
+          <input id="fName" type="text" autocomplete="name" placeholder="陳大文">
+          <div class="err"></div>
+        </div>
+        <div class="field" data-f="phone">
+          <label for="fPhone">電話</label>
+          <input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9123 4567">
+          <div class="err"></div>
+        </div>
+        <div class="field wide" data-f="company">
+          <label for="fCompany">公司 <span class="hint">選填</span></label>
+          <input id="fCompany" type="text" autocomplete="organization" placeholder="ABC Limited">
+          <div class="err"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="fset">
+      <legend>送貨</legend>
+      <div class="grid2">
+        <div class="field" data-f="date">
+          <label for="fDate">日期 <span class="hint" id="dateHint"></span></label>
+          <input id="fDate" type="date">
+          <div class="err"></div>
+        </div>
+        <div class="field" data-f="time">
+          <label for="fTime">時間</label>
+          <select id="fTime"><option value="">請揀</option></select>
+          <div class="err"></div>
+        </div>
+        <div class="field wide" data-f="addr">
+          <label for="fAddr">大廈／屋苑／街道 <span class="hint">打幾隻字再喺清單揀</span></label>
+          <div class="addr-box">
+            <input id="fAddr" type="text" autocomplete="off" role="combobox"
+                   aria-autocomplete="list" aria-controls="acList" aria-expanded="false"
+                   placeholder="例如：時代廣場、太古坊">
+            <div class="ac" id="acList" hidden role="listbox" aria-label="地址建議"></div>
+          </div>
+          <div class="picked-addr" id="pickedAddr" hidden></div>
+          <div class="map" id="map" hidden></div>
+          <div class="err"></div>
+        </div>
+        <div class="field" data-f="unit">
+          <label for="fUnit">樓層／單位</label>
+          <input id="fUnit" type="text" placeholder="12樓 1203室">
+          <div class="err"></div>
+        </div>
+        <div class="field" data-f="district">
+          <label for="fDistrict">地區</label>
+          <select id="fDistrict">
+            <option value="">請揀</option>
+            <option>香港島</option><option>九龍</option><option>新界</option><option>離島</option>
+          </select>
+          <div class="err"></div>
+        </div>
+        <div class="field wide" data-f="walkup">
+          <label class="opt toggle"><input type="checkbox" id="fWalkup"><span>送上寫字樓／樓上 <span class="hint" id="walkupNote">+$100，預設地面交收</span></span></label>
+          <div class="err"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="fset">
+      <legend>其他</legend>
+      <details class="fold" id="remarkFold">
+        <summary>＋ 加備註 <span class="hint">食物敏感、餐具數量等</span></summary>
+        <div class="field wide" data-f="remark">
+          <label for="fRemark" class="sr-only">備註</label>
+          <textarea id="fRemark" placeholder="要 15 套餐具，其中一位對堅果敏感"></textarea>
+          <div class="err"></div>
+        </div>
+      </details>
+    </fieldset>
+
+    <div class="policy">
+      <div class="field" data-f="terms">
+        <label class="opt terms-ok"><input type="checkbox" id="fTerms"><span>我已閱讀並同意落單須知</span></label>
+        <div class="err"></div>
+      </div>
+      <details class="fold" open>
+        <summary>落單須知 <span class="hint">付款・取消・颱風安排</span></summary>
+        <ul>
+          <li>訂單確認後 <b>2 個工作天內</b>付全數。逾期未付款，訂單會自動取消。</li>
+          <li>訂單一經確認，<b>不可更改或取消</b>，已付款項恕不退還。</li>
+          <li>送貨當日如懸掛<b>八號或以上颱風信號</b>或<b>黑色暴雨警告</b>，當日訂單會取消，可於原訂單日期起 <b>2 個月內</b>改期。</li>
+        </ul>
+      </details>
+    </div>
+
+    <div id="errSlot2">
+      <div class="summary-err" id="errBox" hidden aria-live="polite">
+        <h3>仲有幾樣要處理</h3>
+        <ul id="errList"></ul>
+      </div>
+    </div>
+  </div>
+  </div>
+</main>
+
+<!-- ================= 第三步：確認頁 ================= -->
 <main id="doneView" hidden>
   <div class="slip-wrap">
     <div class="slip">
@@ -219,6 +268,32 @@
   </div>
 </main>
 
+<!-- ================= 篩選菜式（彈出視窗） ================= -->
+<dialog class="sheet filter-dlg" id="filterDlg" aria-labelledby="filterTitle">
+  <form method="dialog" class="sheet-in">
+    <button class="sheet-x" type="submit" aria-label="關閉">×</button>
+    <div class="sheet-body">
+      <h2 id="filterTitle">搵食物／篩選</h2>
+      <div id="filterHost"></div>
+      <button class="sheet-add" type="submit" id="filterDone">顯示全部</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ================= 已揀食物（購物車） ================= -->
+<dialog class="sheet cart" id="cart" aria-labelledby="cartTitle">
+  <form method="dialog" class="sheet-in">
+    <button class="sheet-x" type="submit" aria-label="關閉">×</button>
+    <div class="sheet-body">
+      <h2 id="cartTitle">已揀食物</h2>
+      <div class="cart-list" id="cartList"></div>
+      <div class="cart-tot" id="cartTot"></div>
+      <button class="sheet-add" type="button" id="cartGo">去填送貨資料</button>
+      <button class="cart-more" type="submit">繼續揀食物</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- ================= 菜式詳情 ================= -->
 <dialog class="sheet" id="sheet">
   <form method="dialog" class="sheet-in">
@@ -228,7 +303,6 @@
       <div class="sheet-cat" id="shCat"></div>
       <h2 id="shName"></h2>
       <div class="sheet-price" id="shPrice"></div>
-      <div class="sheet-portion" id="shPortion"></div>
       <div class="meta" id="shTags"></div>
       <div class="sheet-qty">
         <span id="shQtyLbl">數量（份）</span>
@@ -238,6 +312,7 @@
           <button type="button" id="shPlus" aria-label="增加">+</button>
         </div>
       </div>
+      <div class="sheet-line" id="shLine"></div>
       <button class="sheet-add" type="submit" id="shAdd">加入訂單</button>
       <p class="sheet-remind">價錢為每「份」總價，已列明份量。</p>
     </div>
@@ -252,7 +327,8 @@
       <span class="amt" id="barAmt">$0</span>
     </div>
     <div class="breakdown" id="barBreak"></div>
-    <button class="submit" id="submitBtn" type="button">落單</button>
+    <button class="bar-back" id="barBack" type="button" hidden>返回餐單</button>
+    <button class="submit" id="submitBtn" type="button">下一步</button>
   </div>
 </div>
 

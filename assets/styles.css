@@ -9,8 +9,12 @@
   --bg-shade-2:#EFE8D6;   /* 更淺一級 — 已揀行底 */
 
   /* Structure */
-  --surface-dark:#0A0908;
+  --surface-dark:#0A0908;       /* 招牌、分類條、底部落單條 */
+  --surface-dark-2:#1A1815;     /* 招牌下面嘅橫額／搜尋列 */
+  --surface-dark-3:#2A2723;     /* 深色面上嘅 hover */
+  --line-on-dark:#3B3733;       /* 深色面上嘅框線 */
   --text-on-dark:#F7F3E7;
+  --text-on-dark-muted:#BFB9AC;
   --text-primary:#1A1815;
   --text-muted:#8E8B84;
 
@@ -31,10 +35,11 @@
 
   --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Helvetica Neue",Arial,sans-serif;
   --maxw:1180px;
+  --head-h:0px;                 /* sticky 招牌高度，由 app.js initHeader() 量度 */
 }
 
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--head-h) + 1rem)}
 body{
   margin:0;
   background:var(--bg-base);
@@ -53,31 +58,86 @@ input,select,textarea{font:inherit;color:inherit}
 /* 粗黑標題 — 緊字距 */
 h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 
-/* ---------- 招牌 masthead ---------- */
-.masthead{background:var(--surface-dark);color:var(--text-on-dark)}
-.masthead-in{
-  max-width:var(--maxw);margin:0 auto;padding:1.4rem 1.25rem 1.25rem;
-  display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem 2.25rem;
+/* ---------- 招牌 masthead（sticky）----------
+   .masthead
+     .masthead-in   logo + 店名 | .head-actions（清除篩選＋漏斗［窄版］、購物車）
+     .banner        臨時橫額（placeholder，規則見 README）
+   ------------------------------------------------ */
+.masthead{
+  position:sticky;top:0;z-index:25;
+  background:var(--surface-dark);color:var(--text-on-dark);
+  box-shadow:0 2px 12px rgba(10,9,8,.25);
 }
-.shop{display:flex;align-items:stretch;gap:.8rem}
-.logo-bar{width:.45rem;background:var(--accent);border-radius:2px;flex:none}
+.masthead-in{
+  max-width:var(--maxw);margin:0 auto;position:relative;
+  padding:1rem 4.5rem 1rem 1.25rem;          /* 右邊留位俾購物車掣（窄版三個掣，見響應式） */
+  display:flex;align-items:center;
+}
+
+/* 店名 + logo */
+.shop{display:flex;align-items:center;gap:1rem}
 .shop h1{font-size:2.3rem;margin:0;letter-spacing:.04em}
 .shop .en{display:block;font-size:.78rem;color:var(--text-muted);letter-spacing:.14em;margin-top:.15rem}
-.terms{
-  margin:0;color:#BFB9AC;font-size:.86rem;line-height:1.9;
-  display:flex;flex-wrap:wrap;gap:.2rem 1.1rem;
+.logo{                                        /* 放咗 <img> 入去就會自動填滿 */
+  width:64px;height:64px;flex:none;border-radius:12px;overflow:hidden;
+  border:1.5px dashed var(--line-on-dark);display:grid;place-items:center;
+  color:var(--text-muted);font-size:.62rem;letter-spacing:.12em;
 }
+.logo:not(:has(img))::before{content:"LOGO"}
+.logo:has(img){border:0}
+.logo img{width:100%;height:100%;object-fit:contain;display:block}
+
+/* 右上角：搜尋 + 購物車 */
+.head-actions{
+  position:absolute;top:50%;transform:translateY(-50%);right:1.25rem;
+  display:flex;gap:.6rem;
+}
+.icon-btn{
+  position:relative;width:2.6rem;height:2.6rem;padding:0;
+  border:1.5px solid var(--line-on-dark);border-radius:50%;background:none;color:var(--text-on-dark);
+  display:grid;place-items:center;
+}
+.icon-btn:hover,.icon-btn[aria-expanded="true"]{border-color:var(--text-on-dark)}
+.icon-btn[hidden]{display:none}
+/* 闊版有側欄（搜尋 + 篩選都喺度），唔使漏斗掣；漏斗只喺第一步（揀食物）先有用 */
+@media (min-width:881px){ #filterBtn,#filterResetBtn{display:none} }
+body:not([data-view="1"]) #filterBtn,
+body:not([data-view="1"]) #filterResetBtn{display:none}
+#filterResetBtn{color:var(--accent);border-color:var(--accent)}     /* 有篩選生效先出現 */
+#filterResetBtn:hover{background:var(--accent);color:#fff}
+.icon-btn svg{width:1.3rem;height:1.3rem;fill:currentColor}
+.badge{                                       /* 圓形掣右上角個數字 */
+  position:absolute;top:-.35rem;right:-.35rem;min-width:1.25rem;height:1.25rem;padding:0 .3rem;
+  border-radius:var(--pill);background:var(--accent);color:#fff;font-size:.7rem;font-weight:900;
+  display:grid;place-items:center;font-variant-numeric:tabular-nums;
+}
+.badge[hidden]{display:none}
+
+/* 臨時橫額 */
+.banner{position:relative;background:var(--surface-dark-2);border-top:2px solid var(--accent)}
+.banner-in{
+  max-width:var(--maxw);margin:0 auto;padding:.45rem 3.4rem .45rem 1.25rem;   /* 右邊留位俾箭嘴 */
+}
+.terms{color:var(--text-on-dark-muted);font-size:.86rem;line-height:1.8}
+.terms p{margin:0;display:flex;flex-wrap:wrap;gap:0 1.1rem}   /* 兩行，每行兩項 */
 .terms b{color:var(--text-on-dark);font-weight:500}
-.terms .promo{
-  color:var(--accent);font-weight:900;letter-spacing:.08em;
+.terms .promo{color:var(--accent);font-weight:900;letter-spacing:.08em}
+/* 箭嘴：展開時喺右邊；收起時成條橫額冇晒，淨係留個細 tab 掛喺招牌下面 */
+.banner-toggle{
+  position:absolute;top:50%;right:1.25rem;transform:translateY(-50%);
+  width:1.9rem;height:1.9rem;border:0;border-radius:50%;background:none;
+  color:var(--text-on-dark-muted);display:grid;place-items:center;
 }
-.masthead-right{margin-inline-start:auto;text-align:right}
-.masthead-right .call{
-  display:inline-block;color:var(--text-on-dark);text-decoration:none;font-weight:700;
-  border:1.5px solid #3B3733;border-radius:var(--pill);padding:.3rem .9rem;font-size:.9rem;
+.banner-toggle:hover{color:var(--text-on-dark);background:var(--surface-dark-3)}
+.banner-toggle svg{width:1.1rem;height:1.1rem;fill:currentColor;transform:rotate(180deg)}
+.banner.collapsed .banner-in{display:none}
+.banner.collapsed .banner-toggle{
+  top:100%;right:auto;left:50%;transform:translateX(-50%);
+  width:3rem;height:1.25rem;border-radius:0 0 var(--radius-md) var(--radius-md);
+  background:var(--surface-dark-2);color:var(--text-on-dark-muted);
 }
-.masthead-right .call:hover{border-color:var(--text-on-dark)}
-.occ-line{font-size:.74rem;color:var(--text-muted);margin-top:.45rem;letter-spacing:.04em}
+.banner.collapsed .banner-toggle:hover{color:var(--text-on-dark)}
+.banner.collapsed .banner-toggle svg{transform:none;width:1rem;height:1rem}
 
 /* ---------- 版面 ---------- */
 .layout{
@@ -85,9 +145,29 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
   display:grid;grid-template-columns:240px 1fr;gap:2.5rem;align-items:start;
 }
 
-/* ---------- 篩選 sidebar ---------- */
-.filters{position:sticky;top:1.25rem}
-.filter-toggle{display:none}
+/* ---------- 篩選 sidebar / 彈出視窗 ----------
+   同一個 #fpanel：桌面放喺側欄，撳漏斗掣就搬入 #filterDlg ---- */
+/* 側欄 sticky；視窗矮過個欄就喺欄入面捲（扣走招牌同底部落單條嘅高度） */
+.filters{
+  position:sticky;top:calc(var(--head-h) + 1.25rem);
+  max-height:calc(100dvh - var(--head-h) - 1.25rem - 104px);
+  overflow-y:auto;overscroll-behavior:contain;
+  padding-right:.5rem;margin-right:-.5rem;          /* 留位俾 scrollbar，唔遮住內容 */
+  scrollbar-width:thin;scrollbar-color:var(--bg-shade) transparent;
+}
+.filters::-webkit-scrollbar{width:6px}
+.filters::-webkit-scrollbar-thumb{background:var(--bg-shade);border-radius:3px}
+/* 彈出視窗高度跟內容走，唔會出現內層 scrollbar；
+   萬一細過內容（好矮嘅手機），成個 dialog 先會捲，而且唔顯示 scrollbar */
+.filter-dlg{max-width:min(92vw,440px);max-height:calc(100dvh - 2rem);overflow:auto;scrollbar-width:none}
+.filter-dlg::-webkit-scrollbar{display:none}
+.filter-dlg .sheet-body{padding-top:1.25rem}
+.filter-dlg .sheet-body h2{margin-bottom:.9rem}
+.filter-dlg .fgroup{margin-bottom:1.1rem}
+.filter-dlg .reset{margin-bottom:.9rem}
+/* 篩選多咗，矮機會要捲：「顯示 N 款」掣黐住底，隨時撳到 */
+.filter-dlg #filterDone{position:sticky;bottom:0;box-shadow:0 -12px 12px -6px var(--bg-base)}
+.filter-dlg .custom-cta,.filter-dlg .side-note{display:none}   /* 彈出視窗淨係篩選 */
 .fgroup{margin-bottom:1.4rem}
 .fgroup h2{
   font-size:.82rem;margin:0 0 .55rem;letter-spacing:.06em;text-transform:uppercase;
@@ -133,14 +213,25 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 .rush-note b{color:var(--accent)}
 
 .course{margin-bottom:2.25rem}
+/* 分類標題 = 收起／展開掣 */
 .course-head{
+  width:100%;text-align:start;border:0;font:inherit;
   display:flex;align-items:baseline;gap:.9rem;flex-wrap:wrap;
   background:var(--surface-dark);color:var(--text-on-dark);
   padding:.6rem 1rem;border-radius:var(--radius-md) var(--radius-md) 0 0;
 }
+.course-head:hover .chev{color:var(--text-on-dark)}
 .course-head h2{font-size:1.45rem;margin:0;letter-spacing:.1em}
-.course-head .note{font-size:.8rem;color:#BFB9AC}
+.course-head .note{font-size:.8rem;color:var(--text-on-dark-muted)}
 .course-head .n{margin-inline-start:auto;font-size:.78rem;color:var(--text-muted)}
+.course-head .chev{
+  width:1.1rem;height:1.1rem;fill:currentColor;color:var(--text-muted);align-self:center;flex:none;
+  transform:rotate(180deg);transition:transform .2s;
+}
+.course.collapsed .course-head{border-radius:var(--radius-md)}
+.course.collapsed .course-head .chev{transform:none}
+.course.collapsed .dish,.course.collapsed .course-foot{display:none}
+.course.collapsed{margin-bottom:1rem}
 .course-foot{
   font-size:.8rem;color:var(--text-muted);padding:.5rem 0 0;text-align:right;
 }
@@ -160,26 +251,25 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
   cursor:zoom-in;background:#fff;
 }
 .dish-body{min-width:0}
-.dish-line{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
-.dish-name{font-size:1.08rem;font-weight:900;letter-spacing:-.005em}
+.dish-line{display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap;margin:.2rem 0 .35rem;line-height:1.3}
+.dish-name{font-size:1.08rem;font-weight:900;letter-spacing:-.005em;line-height:1.25}
 .dish-name button{
   background:none;border:0;padding:0;font:inherit;color:inherit;text-align:start;cursor:pointer;
 }
 .dish-name button:hover{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
 
 /* 價錢膠囊：黑底，原價劃線灰，9折價橙 */
+/* 價錢：淨文字，唔搶個名嘅風頭 */
 .pricepill{
-  display:inline-flex;align-items:baseline;gap:.4rem;
-  background:var(--surface-dark);color:var(--text-on-dark);
-  border-radius:var(--pill);padding:.18rem .7rem .18rem .6rem;
+  display:inline-flex;align-items:baseline;gap:.35rem;
   font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.3;
 }
-.pricepill s{color:var(--text-muted);font-size:.8rem;text-decoration-thickness:1.5px}
-.pricepill .now{color:var(--accent);font-weight:900;font-size:1.02rem}
-.pricepill .per{font-size:.7rem;color:#BFB9AC}
+/* 原價、/單位、份量 同一個細灰字級；淨係現價大一級粗一級 */
+.pricepill s{color:var(--text-muted);font-size:.82rem;text-decoration-thickness:1px}
+.pricepill .now{color:var(--text-primary);font-weight:700;font-size:1rem}
+.pricepill .per{font-size:.82rem;color:var(--text-muted)}
 
-.portion{margin:.2rem 0 .3rem;color:var(--text-muted);font-size:.85rem}
-.portion b{color:var(--text-primary);font-weight:500}
+
 .meta{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
 .tag{
   font-size:.72rem;padding:.08rem .45rem;border:1px solid var(--bg-shade);border-radius:var(--radius-sm);color:var(--text-muted);
@@ -239,8 +329,11 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 .sheet-body{padding:1rem 1.25rem 1.25rem}
 .sheet-cat{font-size:.74rem;letter-spacing:.1em;color:var(--text-muted)}
 .sheet-body h2{margin:.15rem 0 .5rem;font-size:1.45rem}
-.sheet-portion{font-size:.9rem;color:var(--text-muted);margin:.5rem 0}
+.sheet-price{display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap;margin:.35rem 0 .6rem}
+.sheet-price .pricepill .now{font-size:1.25rem}
+.sheet-price .pricepill s,.sheet-price .pricepill .per{font-size:.9rem}
 .sheet-qty{display:flex;align-items:center;justify-content:space-between;margin:1rem 0 .75rem;font-size:.9rem}
+.sheet-line{font-size:.85rem;color:var(--text-primary);font-variant-numeric:tabular-nums;margin:-.25rem 0 .75rem;text-align:right}
 .sheet-add{
   width:100%;padding:.8rem;background:var(--accent);color:#fff;border:0;border-radius:var(--pill);
   font-weight:900;font-size:1rem;letter-spacing:.06em;
@@ -248,11 +341,52 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 .sheet-add:hover{background:var(--accent-deep)}
 .sheet-remind{margin:.75rem 0 0;font-size:.78rem;color:var(--text-muted);text-align:center}
 
+/* ---------- 已揀食物（購物車） ---------- */
+.cart{max-width:min(92vw,520px)}
+.cart .sheet-body{padding-top:1.25rem}
+.cart .sheet-body h2{margin-bottom:.75rem}
+.cart-list{max-height:min(48vh,420px);overflow:auto;border-top:1.5px solid var(--bg-shade)}
+.c-row{
+  display:grid;grid-template-columns:1fr auto;gap:.25rem .9rem;align-items:center;
+  padding:.7rem 0;border-bottom:1.5px solid var(--bg-shade);
+}
+.c-name{font-weight:700}
+.c-meta{font-size:.78rem;color:var(--text-muted)}
+.c-ctl{display:flex;align-items:center;gap:.5rem;grid-row:span 2}
+.c-del{background:none;border:0;color:var(--text-muted);font-size:1.1rem;line-height:1;width:1.8rem;height:1.8rem;border-radius:50%}
+.c-del:hover{color:var(--danger);background:var(--bg-shade-2)}
+.c-line{grid-column:1/-1;font-size:.82rem;font-variant-numeric:tabular-nums;color:var(--text-primary)}
+.c-line.err{color:var(--danger)}
+.cart-empty{padding:2rem 0;text-align:center;color:var(--text-muted)}
+.cart-tot{margin:.9rem 0 1rem;font-size:.9rem;line-height:1.9}
+.cart-tot .r{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.cart-tot .r.grand{font-weight:900;font-size:1.1rem;border-top:1.5px solid var(--bg-shade);margin-top:.3rem;padding-top:.3rem}
+.cart-tot .muted{color:var(--text-muted);font-size:.8rem}
+.cart-more{
+  width:100%;margin-top:.5rem;padding:.7rem;background:none;border:1.5px solid var(--bg-shade);
+  border-radius:var(--pill);font-weight:700;color:var(--text-primary);
+}
+.cart-more:hover{border-color:var(--text-primary)}
+
 /* ---------- 送貨資料 ---------- */
-.delivery{margin-top:2.5rem;padding-top:1.5rem;border-top:3px solid var(--surface-dark)}
+.step-wrap{max-width:760px;margin:0 auto;padding:1.5rem 1.25rem 3rem}
 .delivery h2{font-size:1.45rem;margin:0 0 .25rem;letter-spacing:.06em}
 .delivery p.sub{margin:0 0 1.25rem;color:var(--text-muted);font-size:.9rem}
-.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 1.5rem;max-width:680px}
+.back-link{background:none;border:0;padding:0;margin-bottom:1rem;color:var(--text-muted);font-size:.9rem}
+.back-link:hover{color:var(--text-primary)}
+.link{background:none;border:0;padding:0;color:var(--accent-deep);text-decoration:underline;font-size:inherit}
+.fset{border:0;padding:0;margin:0 0 1.5rem;min-width:0}
+.fset legend{
+  padding:0;margin-bottom:.7rem;font-size:.82rem;font-weight:900;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);
+}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem 1.25rem;max-width:680px}
+/* 摺埋嘅備註／條款 */
+.fold summary{cursor:pointer;font-size:.9rem;font-weight:500;list-style:none;display:flex;gap:.5rem;align-items:baseline}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary .hint{font-size:.78rem;color:var(--text-muted);font-weight:400}
+.fold[open] summary{margin-bottom:.5rem}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .field{display:flex;flex-direction:column;gap:.3rem}
 .field.wide{grid-column:1/-1}
 .field label{font-size:.875rem;font-weight:500}
@@ -262,12 +396,8 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 }
 .field textarea{resize:vertical;min-height:4.5rem}
 .field .opt input{width:auto;padding:0}
-.walkup-note{
-  font-size:.84rem;color:var(--text-muted);padding:.5rem .75rem;background:var(--bg-shade-2);
-  border-radius:var(--radius-sm);border-inline-start:3px solid var(--bg-shade);
-}
-.walkup-note.on{border-inline-start-color:var(--accent);color:var(--text-primary)}
-.walkup-note b{font-weight:700}
+.toggle .hint{margin-inline-start:.35rem}
+.toggle input:checked ~ span .hint{color:var(--accent-deep)}
 .addr-box{position:relative}
 .ac{
   position:absolute;z-index:30;top:100%;left:0;right:0;background:#fff;
@@ -299,8 +429,8 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
   margin-top:1.5rem;max-width:680px;padding:1rem 1.15rem;
   border:1.5px solid var(--bg-shade);border-radius:var(--radius-md);background:#fff;
 }
-.policy h3{margin:0 0 .5rem;font-size:.95rem;letter-spacing:.06em}
-.policy ul{margin:0 0 .75rem;padding-inline-start:1.15rem;font-size:.88rem;color:var(--text-primary);line-height:1.7}
+.policy .fold{margin-top:.6rem}
+.policy ul{margin:0;padding-inline-start:1.15rem;font-size:.86rem;color:var(--text-primary);line-height:1.7}
 .policy b{font-weight:700}
 .terms-ok{font-weight:500}
 .terms-ok input{accent-color:var(--accent)}
@@ -325,11 +455,18 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
   display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;
 }
 .tally{display:flex;flex-direction:column;line-height:1.35}
-.tally .cnt{font-size:.82rem;color:#BFB9AC}
+.tally .cnt{font-size:.82rem;color:var(--text-on-dark-muted)}
 .tally .amt{font-weight:900;font-size:1.55rem;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.breakdown{font-size:.8rem;color:#BFB9AC;border-inline-start:1px solid #3B3733;padding-inline-start:1.25rem;line-height:1.55}
+.breakdown{font-size:.8rem;color:var(--text-on-dark-muted);border-inline-start:1px solid var(--line-on-dark);padding-inline-start:1.25rem;line-height:1.55}
 .breakdown span{font-variant-numeric:tabular-nums;color:var(--text-on-dark)}
 .breakdown .free{color:var(--accent)}
+.bar-back{
+  margin-inline-start:auto;background:none;color:var(--text-on-dark);border:1.5px solid var(--line-on-dark);
+  border-radius:var(--pill);padding:.7rem 1.2rem;font-weight:700;font-size:.95rem;
+}
+.bar-back:hover{border-color:var(--text-on-dark)}
+.bar-back[hidden]{display:none}
+.bar-back + .submit{margin-inline-start:0}
 .submit{
   margin-inline-start:auto;background:var(--accent);color:#fff;border:0;border-radius:var(--pill);
   padding:.8rem 2.2rem;font-weight:900;font-size:1.1rem;letter-spacing:.14em;
@@ -388,27 +525,45 @@ h1,h2,h3,.heavy{font-weight:900;letter-spacing:-.01em;line-height:1.15}
 /* ---------- 響應式 ---------- */
 @media (max-width:880px){
   .layout{grid-template-columns:1fr;gap:1.25rem}
-  .filter-toggle{
-    display:block;width:100%;padding:.65rem;background:none;
-    border:1.5px solid var(--surface-dark);border-radius:var(--pill);font-weight:700;
-  }
-  .filters{position:static}
-  .fpanel{display:none;padding-top:1.25rem}
-  .fpanel.open{display:block}
-  .grid2{grid-template-columns:1fr}
-  .dish{grid-template-columns:64px 1fr;gap:0 .8rem}
-  .dish img{width:64px;height:64px}
-  .pick{grid-column:2;flex-direction:row;align-items:center;justify-content:flex-start;
-        gap:.9rem;margin-top:.5rem;min-width:0;flex-wrap:wrap}
-  .dish-err{grid-column:2}
+  .filters{display:none}                      /* 手機用招牌個漏斗掣 */
+  .grid2{gap:.8rem .75rem}                    /* 手機都係兩欄，短欄位一行兩個 */
+  /* 餐單行：細相、剔選框放右邊同一行；揀咗先喺下面展開數量掣 */
+  .dish{grid-template-columns:56px 1fr auto;gap:0 .7rem;padding:.6rem .35rem;align-items:center}
+  .dish img{width:56px;height:56px;border-radius:var(--radius-sm)}
+  .dish-name{font-size:1rem}
+  .dish-line{margin:.15rem 0 .25rem;gap:.45rem}
+  .pricepill .now{font-size:.95rem}
+  .pricepill s,.pricepill .per{font-size:.78rem}
+  .meta{gap:.25rem}
+  .tag{font-size:.68rem;padding:.04rem .38rem}
+  .pick{min-width:0;align-items:center;gap:.6rem}
+  .tick span{display:none}                    /* 淨係個框，唔使「揀呢款」字 */
+  .dish.on .pick{grid-column:2/-1;flex-direction:row;justify-content:flex-start;flex-wrap:wrap;margin-top:.45rem}
+  .dish.on .tick span{display:inline}
+  .dish-err{grid-column:2/-1}
   .breakdown{display:none}
   .submit{padding:.75rem 1.5rem;font-size:1.05rem}
+  .bar-back{padding:.65rem 1rem;font-size:.9rem}
   .orderbar-in{gap:.75rem}
-  .masthead-right{display:none}
+  /* 彈出視窗（菜式詳情、篩選、購物車）統一闊度：左右各留 1rem */
+  .sheet{max-width:none;width:calc(100vw - 2rem)}
+  /* 招牌 */
+  .masthead-in{padding-right:9.4rem}           /* 最多三個圓形掣（清除篩選、漏斗、購物車） */
+  .head-actions{right:1rem;gap:.4rem}
+  .icon-btn{width:2.4rem;height:2.4rem}
+  .shop{gap:.75rem}
+  .shop .en{font-size:.68rem;letter-spacing:.08em;white-space:nowrap}
+  .banner-in{padding-right:2.9rem}
+  .banner-toggle{right:.75rem}
+  .terms{font-size:.78rem}
+  .terms p{gap:0 .7rem}
   .shop h1{font-size:1.9rem}
+  .logo{width:52px;height:52px}
 }
 @media print{
-  .orderbar,.slip-actions,.wa,.masthead-right{display:none}
+  .orderbar,.slip-actions,.wa,.head-actions,.banner-toggle{display:none}
+  .banner.collapsed .banner-in{display:block}
+  .masthead{position:static;box-shadow:none}
   body{padding-bottom:0}
   .slip{border:0}
 }
